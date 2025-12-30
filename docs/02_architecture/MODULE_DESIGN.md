@@ -68,7 +68,23 @@ pub trait ContextSource {
 }
 ```
 
-## 2. `cue_mcp` (The Server)
+## 2. `cue_config` (Settings)
+
+### Config Structs
+
+```rust
+#[derive(Debug, Deserialize, Clone)]
+pub struct Config {
+    pub core: CoreConfig,
+    pub parser: ParserConfig,
+    pub security: SecurityConfig,
+    pub mcp: McpConfig,
+}
+
+// Sub-structs mirror the TOML structure in CONFIGURATION_REFERENCE.md
+```
+
+## 3. `cue_mcp` (The Server)
 
 ### Enums
 

@@ -42,6 +42,7 @@
 | [`04_tools_and_data/TOOLS_SPEC.md`](./04_tools_and_data/TOOLS_SPEC.md) | MCP Tool JSON Schemas. |
 | [`04_tools_and_data/API_DOCUMENTATION.md`](./04_tools_and_data/API_DOCUMENTATION.md) | Internal Rust APIs. |
 | [`04_tools_and_data/CLI_REFERENCE.md`](./04_tools_and_data/CLI_REFERENCE.md) | Arguments, Flags, Help Text. |
+| [`04_tools_and_data/CONFIGURATION_REFERENCE.md`](./04_tools_and_data/CONFIGURATION_REFERENCE.md) | **New**: TOML Spec, Defaults, Env Vars. |
 | [`04_tools_and_data/KNOWLEDGE_BASE_STRUCTURE.md`](./04_tools_and_data/KNOWLEDGE_BASE_STRUCTURE.md) | File Formats (Frontmatter, Cache). |
 
 ## 🛡️ 5. Quality & Ops (The "How")
@@ -49,6 +50,7 @@
 | File | Purpose |
 | :--- | :--- |
 | [`05_quality_and_ops/TESTING_STRATEGY.md`](./05_quality_and_ops/TESTING_STRATEGY.md) | Unit, Integ, Watcher tests. |
+| [`05_quality_and_ops/LOGGING_AND_TELEMETRY.md`](./05_quality_and_ops/LOGGING_AND_TELEMETRY.md) | **New**: Tracing strategy & Log levels. |
 | [`05_quality_and_ops/EVALUATION_METRICS.md`](./05_quality_and_ops/EVALUATION_METRICS.md) | Performance KPIs. |
 | [`05_quality_and_ops/TROUBLESHOOTING.md`](./05_quality_and_ops/TROUBLESHOOTING.md) | Fixes for common errors. |
 | [`01_general/CONTRIBUTING.md`](./01_general/CONTRIBUTING.md) | Setup, PRs, Versioning. |

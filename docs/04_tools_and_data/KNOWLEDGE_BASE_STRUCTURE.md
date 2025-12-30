@@ -66,36 +66,15 @@ refs:                     # OPTIONAL: Explicit Graph Edges
 
 **File**: `.cuedeck/config.toml` (or `~/.config/cuedeck/config.toml`)
 
+### C. Configuration Reference
+
+**File**: `.cuedeck/config.toml`
+
+> **Note**: For the full list of options, defaults, and environment variable overrides, see [`CONFIGURATION_REFERENCE.md`](./CONFIGURATION_REFERENCE.md).
+
 ```toml
-# CueDeck v2.1 Configuration
-
 [core]
-# Token Limit for the generated SCENE.md (default: 32000)
 token_limit = 32000
-# Hash algorithm (sha256 is currently the only supported)
-hash_algo = "sha256"
-
-[parser]
-# Files to ignore (uses .gitignore syntax)
-ignore_patterns = [
-    "target/",
-    "node_modules/",
-    "*.lock",
-    "*.log"
-]
-# H1-H6 headers are extracted as anchors
-anchor_levels = [1, 2, 3]
-
-[security]
-# Mask secrets matching these patterns
-secret_patterns = [
-    "(sk-[a-zA-Z0-9]{20,})", # Standard API Keys
-    "(ghp_[a-zA-Z0-9]{20,})" # GitHub Tokens
-]
-
-[mcp]
-# Maximum search results for `read_context`
-search_limit = 10
 ```
 
 ---
