@@ -51,5 +51,68 @@ mod tests {
 - We strictly enforce `clippy::pedantic` in CI, but allow specific exclusions in `lib.rs` (`#![allow(clippy::module_name_repetitions)]`).
 - **Unwrap**: Allowed ONLY in `tests/` or when checking invariants that verifyably cannot fail. In app code, use `Expect` or propagate `Result`.
 
+## 6. Naming Conventions (Rust)
+
+### Variables & Functions
+
+```rust
+// Variables: snake_case
+let user_name = "John"; // ✅
+let userName = "John"; // ❌
+
+// Functions: snake_case
+fn get_user_data() {} // ✅
+fn GetUserData() {} // ❌
+
+// Constants: SCREAMING_SNAKE_CASE
+const MAX_RETRIES: u32 = 3; // ✅
+const max_retries: u32 = 3; // ❌
+```
+
+### Types & Traits
+
+```rust
+// Structs: PascalCase
+struct UserManager {} // ✅
+struct user_manager {} // ❌
+
+// Traits: PascalCase
+trait Serializable {} // ✅
+trait serializable {} // ❌
+
+// Enums: PascalCase (type) and PascalCase (variants)
+enum Status {
+    Active,
+    Inactive,
+} // ✅
+```
+
+### Methods & Lifetimes
+
+```rust
+impl User {
+    fn get_email(&self) {} // ✅
+    fn GetEmail(&self) {} // ❌
+}
+
+// Lifetimes: Single lowercase letters
+fn borrow<'a>(input: &'a str) -> &'a str {} // ✅
+fn borrow<'lifetime>(input: &'lifetime str) {} // ❌
+```
+
+### Modules & Files
+
+```rust
+// Modules: snake_case
+mod user_service; // ✅
+mod UserService; // ❌
+```
+
+```text
+// Files: snake_case.rs
+src/user_service.rs ✅
+src/UserService.rs ❌
+```
+
 ---
 **Related Docs**: [CONTRIBUTING.md](../01_general/CONTRIBUTING.md), [TESTING_STRATEGY.md](../05_quality_and_ops/TESTING_STRATEGY.md)

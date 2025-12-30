@@ -149,5 +149,153 @@ pub enum CardCommands {
 }
 ```
 
+## 4. Core Engine Structures (Extended)
+
+### Dependency Graph
+
+```rust
+/// Graph of file dependencies for resolution
+pub struct DependencyGraph {
+    /// File path -> FileNode mapping
+    pub nodes: HashMap<PathBuf, FileNode>,
+    /// File path -> list of dependents
+    pub edges: HashMap<PathBuf, Vec<PathBuf>>,
+    /// Detected circular dependencies
+    pub circular_deps: Option<Vec<(PathBuf, PathBuf)>>,
+}
+
+/// Metadata for each file in the graph
+pub struct FileNode {
+    pub path: PathBuf,
+    pub hash: String,
+    pub size: usize,
+    pub language: String,
+    pub imports: Vec<String>,
+    pub exports: Vec<String>,
+    pub is_test: bool,
+    pub is_generated: bool,
+    pub last_modified: DateTime<Utc>,
+}
+```
+
+### File Index
+
+```rust
+/// Quick lookup index for file metadata
+pub struct FileIndex {
+    /// Path -> metadata mapping
+    pub entries: HashMap<PathBuf, FileIndexEntry>,
+}
+
+pub struct FileIndexEntry {
+    pub hash: String,
+    /// Importance score (0.0 - 1.0)
+    pub importance: f32,
+    pub recently_used: bool,
+    pub modification_count: u32,
+}
+```
+
+### Session State
+
+```rust
+/// Persistent session state for context continuity
+pub struct SessionState {
+    pub session_id: String,
+    pub start_time: DateTime<Utc>,
+    pub last_access: DateTime<Utc>,
+    pub workflow: String,
+    pub current_step: u8,
+    
+    /// Files in current working set
+    pub working_set: Vec<WorkingSetFile>,
+    /// Decisions made during session
+    pub decisions: Vec<Decision>,
+    /// Active assumptions
+    pub assumptions: Vec<Assumption>,
+    
+    /// Checksum to detect stale context
+    pub context_checksum: String,
+    pub tokens_used: usize,
+    pub max_tokens: usize,
+}
+
+pub struct WorkingSetFile {
+    pub path: PathBuf,
+    pub hash: String,
+    pub role: FileRole,
+    pub timestamp: DateTime<Utc>,
+    pub importance: f32,
+}
+
+pub enum FileRole {
+    Read,
+    Write,
+    Both,
+}
+
+pub struct Decision {
+    pub id: String,
+    pub timestamp: DateTime<Utc>,
+    pub decision: String,
+    pub rationale: String,
+    pub alternatives: Vec<String>,
+    pub affects: Vec<PathBuf>,
+    pub reversible: bool,
+}
+
+pub struct Assumption {
+    pub id: String,
+    pub assumption: String,
+    pub source: String,
+    pub validated: bool,
+    pub impact: Impact,
+    pub status: AssumptionStatus,
+}
+
+pub enum Impact { Low, Medium, High }
+pub enum AssumptionStatus { Active, Invalidated, Resolved }
+```
+
+### Workflow Execution
+
+```rust
+/// State machine for multi-step workflows
+pub struct WorkflowExecution {
+    pub id: String,
+    pub workflow: String,
+    pub status: ExecutionStatus,
+    pub steps: Vec<StepExecution>,
+    pub current_step: WorkflowStep,
+    pub started_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+pub enum ExecutionStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Failed,
+}
+
+pub enum WorkflowStep {
+    Specification,
+    Planning,
+    Implementation,
+    Review,
+    Integration,
+}
+
+pub struct StepExecution {
+    pub name: WorkflowStep,
+    pub status: ExecutionStatus,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub output: Option<String>,
+    pub tokens_used: Option<usize>,
+    pub errors: Vec<String>,
+}
+```
+
 ---
 **Related Docs**: [SYSTEM_ARCHITECTURE.md](./SYSTEM_ARCHITECTURE.md), [API_DOCUMENTATION.md](../04_tools_and_data/API_DOCUMENTATION.md)

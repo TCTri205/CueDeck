@@ -75,5 +75,92 @@ CueDeck **does not** execute arbitrary code. Its security model is based on:
 - **Cache**: `.cuedeck/.cache/` is Git-ignored and contains no secrets (only hashes and counts).
 - **Logs**: `.cuedeck/logs/mcp.log` should be added to `.gitignore` by `cue init`.
 
+## 5. Extended Secret Patterns
+
+### Database Credentials
+
+```ini
+[DATABASE_CREDENTIALS]
+# MongoDB connection strings
+REGEX: mongodb(\+srv)?:\/\/[^@]*:[^@]*@
+SEVERITY: CRITICAL
+ACTION: block
+MESSAGE: MongoDB credentials detected
+FIX_SUGGESTION: Use environment variables
+
+# PostgreSQL passwords
+REGEX: postgresql:\/\/[^:]+:[^@]+@
+SEVERITY: CRITICAL
+ACTION: block
+
+# MySQL passwords  
+REGEX: mysql:\/\/[^:]+:[^@]+@
+SEVERITY: CRITICAL
+ACTION: block
+```
+
+### Private Keys
+
+```ini
+[PRIVATE_KEYS]
+# RSA/ECDSA private keys
+REGEX: -----BEGIN (RSA|ECDSA) PRIVATE KEY-----
+SEVERITY: CRITICAL
+ACTION: block
+MESSAGE: Private cryptographic key in source code
+
+# SSH keys
+REGEX: -----BEGIN OPENSSH PRIVATE KEY-----
+SEVERITY: CRITICAL
+ACTION: block
+```
+
+### JWT Tokens
+
+```ini
+[JWT_TOKENS]
+# Real JWT tokens (eyJ format)
+REGEX: eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{40,}
+SEVERITY: HIGH
+ACTION: redact
+MESSAGE: JWT token detected - will be redacted for agent
+```
+
+## 6. Code Quality Security Rules
+
+### Unsafe Patterns
+
+```ini
+[UNSAFE_PATTERNS]
+# Unsafe eval in JavaScript
+REGEX: eval\s*\(
+SEVERITY: CRITICAL
+ACTION: block
+LANGUAGE: javascript,typescript
+MESSAGE: eval() is unsafe - use safe alternatives
+
+# SQL injection vulnerable patterns
+REGEX: query\s*\(\s*["']\s*\+|query\s*\(\s*`[^`]*\$\{
+SEVERITY: CRITICAL
+ACTION: block
+MESSAGE: SQL injection vulnerability - use parameterized queries
+```
+
+### Dangerous Configuration
+
+```ini
+[DANGEROUS_CONFIG]
+PATTERN_FILE: .env
+DANGEROUS: DEBUG=true
+SEVERITY: CRITICAL
+ACTION: block
+MESSAGE: Debug mode enabled in production environment
+
+PATTERN_FILE: .env.production
+DANGEROUS: SSL_VERIFY=false
+SEVERITY: CRITICAL
+ACTION: block
+```
+
 ---
-**Related Docs**: [SYSTEM_ARCHITECTURE.md](../02_architecture/SYSTEM_ARCHITECTURE.md), [TROUBLESHOOTING.md](../05_quality_and_ops/TROUBLESHOOTING.md)
+**Related Docs**: [SYSTEM_ARCHITECTURE.md](../02_architecture/SYSTEM_ARCHITECTURE.md), [TROUBLESHOOTING.md](../05_quality_and_ops/TROUBLESHOOTING.md), [GOVERNANCE_TEMPLATES.md](../03_agent_design/GOVERNANCE_TEMPLATES.md), [ARCHITECTURE_RULES.md](./ARCHITECTURE_RULES.md)

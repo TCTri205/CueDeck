@@ -67,5 +67,94 @@ If the total exceeds the token budget:
 - **Keep**: Root (Card) + Depth 1.
 - **Prune**: Depth 2+ (with "Truncated" warning).
 
+## 4. Session Persistence (Extended)
+
+### Session State Schema
+
+```json
+{
+  "sessionId": "feature-auth-123",
+  "createdAt": "2025-01-15T10:00:00Z",
+  "lastAccess": "2025-01-15T10:45:32Z",
+  "workflow": "feature-development",
+  "currentStep": 3,
+  "workingSet": {
+    "src/api.ts": {"hash": "abc...", "role": "read", "timestamp": "10:30:00Z"},
+    "src/auth.ts": {"hash": "def...", "role": "write", "timestamp": "10:45:00Z"}
+  },
+  "decisions": [
+    {"step": 1, "title": "Use JWT tokens", "timestamp": "10:05:00Z"},
+    {"step": 2, "title": "Add to middleware", "timestamp": "10:20:00Z"}
+  ],
+  "contextChecksum": "xyz123"
+}
+```
+
+### Storage Location
+
+- **Session Files**: `.cuedeck/sessions/[session-id].json`
+- **Compression**: LZ4 for large sessions
+- **Cleanup**: Auto-cleanup after 7 days
+
+### Continuity Mechanism
+
+```text
+When agent resumes:
+1. Load session file
+2. Check contextChecksum:
+   - If valid: Use cached context
+   - If invalid: Refresh changed files only
+3. Inject session summary:
+   "Continuing auth feature development. 
+    Last action: Added JWT middleware. 
+    Next: Integrate with login endpoint."
+4. Load updated working set
+```
+
+## 5. Anti-Forgetting Mechanisms
+
+### Progress Tracking
+
+```text
+Every 5 minutes:
+- Store what was accomplished
+- List pending actions
+- Capture current state
+- Inject reminder of current task
+
+Prompt injection:
+"Progress so far this session:
+- ✅ Created user model
+- ✅ Added auth middleware
+- ⏳ Integrating with login endpoint
+- ⏹️ Need to: Add password hashing"
+```
+
+### Decision Logging
+
+```json
+{
+  "timestamp": "...",
+  "decision": "Use bcrypt for password hashing",
+  "rationale": "Industry standard, proven secure",
+  "alternatives": ["argon2 (slower)", "simple hash (insecure)"],
+  "file": "src/auth.ts",
+  "impact": ["user model", "password reset flow"]
+}
+```
+
+When context is tight, inject decisions:
+> "Remember: We chose bcrypt because it's proven secure. This affects the user model and password reset flow."
+
+### Assumption Validation
+
+Track assumptions:
+- "Project uses React" → Validate on new session
+- "Database is PostgreSQL" → Check against config
+- "API uses REST" → Confirm in architecture.md
+
+If assumption becomes invalid:
+> ⚠️ "Assumption changed: Found GraphQL endpoint. This may affect the auth implementation."
+
 ---
 **Related Docs**: [ALGORITHMS.md](../02_architecture/ALGORITHMS.md), [SYSTEM_ARCHITECTURE.md](../02_architecture/SYSTEM_ARCHITECTURE.md), [GLOSSARY.md](../01_general/GLOSSARY.md)

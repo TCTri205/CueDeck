@@ -111,4 +111,4 @@ classDiagram
 ```
 
 ---
-**Related Docs**: [ALGORITHMS.md](./ALGORITHMS.md), [TECH_STACK.md](./TECH_STACK.md), [WORKFLOWS.md](./WORKFLOWS.md), [SECURITY.md](./SECURITY.md)
+**Related Docs**: [ALGORITHMS.md](./ALGORITHMS.md), [TECH_STACK.md](./TECH_STACK.md), [WORKFLOWS.md](./WORKFLOWS.md), [SECURITY.md](./SECURITY.md), [MODULE_DESIGN.md](./MODULE_DESIGN.md), [ARCHITECTURE_RULES.md](./ARCHITECTURE_RULES.md)
