@@ -1,8 +1,7 @@
 use crate::parse_file;
-use cue_common::{CueError, Document, Result, CardMetadata};
+use cue_common::{CueError, Document, Result};
 use std::path::{Path, PathBuf};
 use std::fs;
-use std::io::Write;
 
 /// List all task cards in the workspace, optionally filtering
 #[tracing::instrument(skip(workspace_root))]

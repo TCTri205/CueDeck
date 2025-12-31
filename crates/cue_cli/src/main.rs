@@ -37,6 +37,10 @@ enum Commands {
     Open {
         /// Optional initial search query
         query: Option<String>,
+        
+        /// Use semantic search instead of keyword matching
+        #[arg(long)]
+        semantic: bool,
     },
     
     /// Watch for file changes and auto-regenerate scene
@@ -124,12 +128,12 @@ async fn main() {
     let result = match cli.command {
         Commands::Init => cmd_init().await,
         Commands::Scene { dry_run, token_limit } => cmd_scene(dry_run, token_limit).await,
-        Commands::Open { query } => {
-            cmd_open(query).await?;
+        Commands::Open { query, semantic } => {
+            cmd_open(query, semantic).await
         }
         
         Commands::Watch => {
-            cmd_watch().await?;
+            cmd_watch().await
         }
         
         Commands::Doctor { repair, json } => cmd_doctor(repair, json).await,
@@ -268,14 +272,18 @@ async fn cmd_scene(dry_run: bool, _token_limit: Option<usize>) -> anyhow::Result
     Ok(())
 }
 
-async fn cmd_open(query: Option<String>) -> anyhow::Result<()> {
+async fn cmd_open(query: Option<String>, semantic: bool) -> anyhow::Result<()> {
     use std::io::{self, Write};
     use cue_core::context::search_workspace;
     
     let cwd = std::env::current_dir()?;
     let query_str = query.unwrap_or_default();
     
-    let docs = search_workspace(&cwd, &query_str)?;
+    if semantic {
+        eprintln!("🔍 Using semantic search...");
+    }
+    
+    let docs = search_workspace(&cwd, &query_str, semantic)?;
     
     if docs.is_empty() {
         eprintln!("No results found for query: '{}'", query_str);
@@ -313,54 +321,6 @@ async fn cmd_open(query: Option<String>) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn cmd_watch() -> anyhow::Result<()> {
-    use notify::{Watcher, RecursiveMode, recommended_watcher};
-    use std::sync::mpsc::channel;
-    
-    eprintln!("✓ Starting watcher...");
-    eprintln!("Watching for changes (Ctrl+C to stop)");
-    
-    let (tx, rx) = channel();
-    
-    let mut watcher = recommended_watcher(move |res| {
-        tx.send(res).unwrap();
-    })?;
-    
-    // Watch .cuedeck/cards and .cuedeck/docs
-    watcher.watch(Path::new(".cuedeck/cards"), RecursiveMode::Recursive)?;
-    watcher.watch(Path::new(".cuedeck/docs"), RecursiveMode::Recursive)?;
-    
-    loop {
-        match rx.recv() {
-            Ok(Ok(event)) => {
-                eprintln!("[{}] Change detected: {:?}", chrono::Local::now().format("%H:%M:%S"), event.kind);
-                
-                // Regenerate scene
-                match cue_core::generate_scene(Path::new(".")) {
-                    Ok(scene) => {
-                        // Update clipboard
-                        if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                            let _ = clipboard.set_text(&scene);
-                            eprintln!("✓ Scene regenerated and copied to clipboard");
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("⚠ Failed to regenerate scene: {}", e);
-                    }
-                }
-            }
-            Ok(Err(e)) => {
-                eprintln!("⚠ Watch error: {}", e);
-            }
-            Err(e) => {
-                eprintln!("⚠ Channel error: {}", e);
-                break;
-            }
-        }
-    }
-    
-    Ok(())
-}
 
 async fn cmd_doctor(_repair: bool, json: bool) -> anyhow::Result<()> {
     use std::fs;

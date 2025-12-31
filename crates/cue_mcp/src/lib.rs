@@ -175,6 +175,8 @@ async fn handle_read_context(params: Option<Value>) -> Result<Value> {
     struct SearchParams {
         query: String,
         limit: Option<usize>,
+        #[serde(default)]
+        semantic: bool,
     }
 
     let params: SearchParams = params
@@ -182,8 +184,10 @@ async fn handle_read_context(params: Option<Value>) -> Result<Value> {
         .and_then(|v| serde_json::from_value(v)
             .map_err(|e| CueError::ValidationError(format!("Invalid params: {}", e))))?;
 
+    tracing::info!("read_context: query='{}', semantic={}", params.query, params.semantic);
+
     let cwd = std::env::current_dir()?;
-    let results = cue_core::context::search_workspace(&cwd, &params.query)?;
+    let results = cue_core::context::search_workspace(&cwd, &params.query, params.semantic)?;
     
     // Convert to simplified JSON response
     let limit = params.limit.unwrap_or(10);

@@ -91,16 +91,16 @@ fn test_context_search_integration() {
     temp.child("ignored.txt").write_str("Not a markdown file").unwrap();
 
     // 1. Search by filename
-    let results = search_workspace(root, "guide").expect("Search failed");
+    let results = search_workspace(root, "guide", false).expect("Search failed");
     assert!(!results.is_empty());
     assert_eq!(results[0].path.file_name().unwrap(), "guide.md");
 
     // 2. Search by content
-    let results = search_workspace(root, "developers").expect("Search failed");
+    let results = search_workspace(root, "developers", false).expect("Search failed");
     assert!(!results.is_empty());
     assert_eq!(results[0].path.file_name().unwrap(), "api.md");
 
     // 3. Search miss
-    let results = search_workspace(root, "banana").expect("Search failed");
+    let results = search_workspace(root, "banana", false).expect("Search failed");
     assert!(results.is_empty());
 }

@@ -18,6 +18,7 @@ serde_yaml.workspace = true
 regex.workspace = true
 rand.workspace = true
 serde_json.workspace = true
+fastembed = "4.0"  # ONNX-based embeddings for semantic search
 
 [dev-dependencies]
 assert_fs.workspace = true

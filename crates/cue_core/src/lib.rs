@@ -10,6 +10,7 @@ use std::fs;
 
 pub mod tasks;
 pub mod context;
+pub mod embeddings;
 
 /// Parse a markdown file into a Document
 #[tracing::instrument(skip_all, fields(path = ?path))]
@@ -49,8 +50,8 @@ pub fn parse_file(path: &Path) -> Result<Document> {
     };
     
     // Parse anchors (headings) using manual check (efficient enough)
-    let mut anchors = Vec::new();
-    let mut current_line = 1;
+    let mut anchors = Vec::new();    // Start line parsing
+    let _current_line = 1;
     // Adjust current_line if frontmatter was stripped?
     // Actually, we should parse lines from original content to keep line numbers accurate.
     

@@ -1,12 +1,22 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use walkdir::WalkDir;
-use cue_common::{Document, Result, CueError};
+use cue_common::{Document, Result};
 use crate::parse_file;
+use crate::embeddings::EmbeddingModel;
 
 #[tracing::instrument(skip(root))]
-pub fn search_workspace(root: &Path, query: &str) -> Result<Vec<Document>> {
-    tracing::info!("Searching workspace: {:?} for '{}'", root, query);
+pub fn search_workspace(root: &Path, query: &str, semantic: bool) -> Result<Vec<Document>> {
+    tracing::info!("Searching workspace: {:?} for '{}' (semantic: {})", root, query, semantic);
 
+    if semantic {
+        search_workspace_semantic(root, query, 10)
+    } else {
+        search_workspace_keyword(root, query)
+    }
+}
+
+/// Keyword-based search (original implementation)
+fn search_workspace_keyword(root: &Path, query: &str) -> Result<Vec<Document>> {
     let query_lower = query.to_lowercase();
     let query_tokens: Vec<&str> = query_lower.split_whitespace().collect();
     
@@ -50,6 +60,70 @@ pub fn search_workspace(root: &Path, query: &str) -> Result<Vec<Document>> {
         
     Ok(top_docs)
 }
+
+/// Semantic search using vector embeddings
+fn search_workspace_semantic(root: &Path, query: &str, limit: usize) -> Result<Vec<Document>> {
+    tracing::info!("Performing semantic search for: '{}'", query);
+    
+    // Generate query embedding
+    let query_embedding = EmbeddingModel::embed(query)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    
+    let mut candidates: Vec<(Document, f32)> = Vec::new();
+    
+    // Walk files
+    let walker = WalkDir::new(root)
+        .follow_links(true)
+        .into_iter()
+        .filter_entry(|e| !is_ignored(e));
+    
+    for entry in walker.filter_map(|e| e.ok()) {
+        if entry.file_type().is_file() {
+            if let Some(ext) = entry.path().extension() {
+                if ext == "md" {
+                    match parse_file(entry.path()) {
+                        Ok(doc) => {
+                            // Read file content for embedding
+                            if let Ok(content) = std::fs::read_to_string(&doc.path) {
+                                // Truncate very long files to avoid embedding overhead
+                                let content_sample = if content.len() > 5000 {
+                                    &content[..5000]
+                                } else {
+                                    &content
+                                };
+                                
+                                match EmbeddingModel::embed(content_sample) {
+                                    Ok(doc_embedding) => {
+                                        let similarity = EmbeddingModel::cosine_similarity(
+                                            &query_embedding,
+                                            &doc_embedding
+                                        );
+                                        candidates.push((doc, similarity));
+                                    }
+                                    Err(_e) => {
+                                        // Skip files that fail to embed
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => tracing::warn!("Failed to parse {:?}: {}", entry.path(), e),
+                    }
+                }
+            }
+        }
+    }
+    
+    // Sort by similarity descending
+    candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    
+    // Return top N
+    Ok(candidates.into_iter()
+        .take(limit)
+        .map(|(doc, _)| doc)
+        .collect())
+}
+
 
 fn is_ignored(entry: &walkdir::DirEntry) -> bool {
     let name = entry.file_name().to_string_lossy();
