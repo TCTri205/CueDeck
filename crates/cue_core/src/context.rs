@@ -193,17 +193,17 @@ mod tests {
         let root = temp.path();
 
         // Search for "todo"
-        let results = search_workspace(root, "todo").unwrap();
+        let results = search_workspace(root, "todo", false).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].path.file_name().unwrap().to_str().unwrap(), "todo.md");
 
         // Search for "legacy" (content match)
-        let results = search_workspace(root, "legacy").unwrap();
+        let results = search_workspace(root, "legacy", false).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].path.file_name().unwrap().to_str().unwrap(), "notes.md");
         
         // Search "readme" (filename match)
-        let results = search_workspace(root, "readme").unwrap();
+        let results = search_workspace(root, "readme", false).unwrap();
          assert_eq!(results.len(), 1);
          assert_eq!(results[0].path.file_name().unwrap(), "readme.md");
     }

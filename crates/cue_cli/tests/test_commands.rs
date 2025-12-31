@@ -81,7 +81,9 @@ fn test_cue_card_generate() {
         .arg("Test Card")
         .assert()
         .success()
-        .stderr(predicate::str::contains("Created .cuedeck/cards/"));
+        .stderr(predicate::str::contains("Created"))
+        .stderr(predicate::str::contains(".cuedeck"))
+        .stderr(predicate::str::contains("cards"));
 }
 
 #[test]

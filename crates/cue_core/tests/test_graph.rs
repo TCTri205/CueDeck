@@ -12,6 +12,7 @@ fn create_test_doc(path: &str) -> Document {
         hash: "test_hash".to_string(),
         tokens: 100,
         anchors: vec![],
+        links: vec![],
     }
 }
 
