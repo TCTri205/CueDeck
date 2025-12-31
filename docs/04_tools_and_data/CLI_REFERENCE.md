@@ -43,16 +43,26 @@ Generates the context for the LLM.
 
 ### `cue open [QUERY]`
 
-Launches the interactive TUI (Skim).
+Launches the interactive file selector with keyword or semantic search.
 
 - **Arguments**:
-- **Arguments**:
   - `QUERY`: Optional initial search filter.
+- **Flags**:
+  - `--semantic`: Enable semantic search using AI embeddings (requires ~22MB model download on first use).
+- **Search Modes**:
+  - **Keyword** (default): Fast exact/fuzzy text matching (~100ms).
+  - **Semantic** (`--semantic`): Conceptual similarity matching (~10-15s, uses all-MiniLM-L6-v2).
 - **Interaction**:
   - `Type`: Filter files by filename (high weight) or content (token match).
   - `Up/Down`: Navigate results.
   - `Enter`: Open selected file in `$EDITOR`.
   - `Esc`: Exit.
+- **Examples**:
+
+  ```bash
+  cue open "authentication"          # Keyword search
+  cue open "concurrent programming" --semantic  # Semantic search
+  ```
 
 ### `cue watch`
 
@@ -160,7 +170,8 @@ Starts the MCP (Model Context Protocol) Server for AI integration (Module 3).
   ```
 
 - **Supported Methods**:
-  - `read_context(query, limit)` — Fuzzy search across context
+  - `read_context(query, limit, semantic)` — Fuzzy or semantic search across context
+    - `semantic` (optional, boolean): Enable semantic search (default: false)
   - `read_doc(path, anchor)` — Read specific document or section
   - `list_tasks(status)` — List cards by status
   - `update_task(id, updates)` — Modify card frontmatter

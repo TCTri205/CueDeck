@@ -2,6 +2,35 @@
 
 All notable changes to CueDeck will be documented in this file.
 
+## [2.2.0] - 2025-12-31
+
+### Added
+
+- ✨ Semantic search with FastEmbed-rs (all-MiniLM-L6-v2)
+- 🎯 `--semantic` flag for `cue open` command
+- 🔧 MCP `semantic` parameter for `read_context` tool
+- 📦 New `embeddings.rs` module with lazy model initialization
+- 🧪 Integration tests for semantic search functionality
+
+### Changed
+
+- ⬆️ Upgraded `fastembed` to v4.9.1 for Rust compatibility
+- 🔄 Extended `search_workspace()` with semantic parameter
+- 📚 Updated documentation with semantic search usage
+
+### Performance
+
+- First run: ~5s (model download ~22MB + initialization)
+- Subsequent searches: 10-15s for full workspace scan
+- Keyword search: <100ms (unchanged)
+- Model cached after first use
+
+### Testing
+
+- ✅ 29/29 tests passing
+- ✅ Full integration test suite
+- ✅ Semantic vs keyword search comparison tests
+
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 

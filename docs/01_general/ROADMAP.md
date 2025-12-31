@@ -128,7 +128,7 @@ gantt
 
 | Phase | Theme | Key Features | Status |
 | :--- | :--- | :--- | :--- |
-| **5** | Semantic Enhancement | Optional vector search layer | 🔄 In Progress (v2.2.0) |
+| **5** | Semantic Enhancement | Optional vector search layer | ✅ Completed (v2.2.0) |
 | **6** | Cloud Sync | Optional `.cuedeck/` backup to cloud | ⬜ Future |
 | **7** | IDE Plugins | VSCode/JetBrains integrations | ⬜ Future |
 | **8** | Team Features | Multi-user card assignments | ⬜ Future |
