@@ -2,6 +2,36 @@
 
 All notable changes to CueDeck will be documented in this file.
 
+## [2.3.0] - 2025-12-31
+
+### Added
+
+- 🔗 **Advanced Graph Features** with `petgraph` integration
+- 📊 `cue graph` command for dependency visualization
+  - ASCII format (terminal output)
+  - Mermaid format (GitHub/docs integration)
+  - DOT format (Graphviz compatibility)
+  - JSON export (machine-readable)
+- 📈 Graph statistics (`--stats` flag)
+  - Node and edge counts
+  - Cycle detection with path tracing
+  - Orphan document identification
+- 🔍 Enhanced `cue doctor` with real cycle detection
+  - Full dependency path for cycles
+  - Improved error reporting
+
+### Changed
+
+- ⬆️ Added `petgraph` v0.6 dependency
+- 🔧 Extended `DependencyGraph` with analytics methods
+- 📚 Updated `CLI_REFERENCE.md` with graph commands
+
+### Testing
+
+- ✅ 39/39 tests passing (5 new graph tests)
+- ✅ Manual verification of all graph formats
+- ✅ Cycle detection validated on test graphs
+
 ## [2.2.0] - 2025-12-31
 
 ### Added

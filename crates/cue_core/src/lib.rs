@@ -11,6 +11,8 @@ use std::fs;
 pub mod tasks;
 pub mod context;
 pub mod embeddings;
+pub mod graph;
+pub mod graph_viz;
 
 /// Parse a markdown file into a Document
 #[tracing::instrument(skip_all, fields(path = ?path))]

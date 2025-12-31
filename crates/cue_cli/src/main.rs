@@ -88,6 +88,21 @@ enum Commands {
     
     /// Start MCP server (JSON-RPC over stdio)
     Mcp,
+    
+    /// Visualize dependency graph
+    Graph {
+        /// Output format
+        #[arg(long, default_value = "ascii")]
+        format: String,
+        
+        /// Write to file instead of stdout
+        #[arg(long)]
+        output: Option<String>,
+        
+        /// Show graph statistics
+        #[arg(long)]
+        stats: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -143,6 +158,7 @@ async fn main() {
         Commands::Logs { action } => cmd_logs(action).await,
         Commands::Upgrade => cmd_upgrade().await,
         Commands::Mcp => cmd_mcp().await,
+        Commands::Graph { format, output, stats } => cmd_graph(format, output, stats).await,
     };
     
     if let Err(e) = result {
@@ -325,9 +341,9 @@ async fn cmd_open(query: Option<String>, semantic: bool) -> anyhow::Result<()> {
 async fn cmd_doctor(_repair: bool, json: bool) -> anyhow::Result<()> {
     use std::fs;
     
-    eprintln!("✓ Running diagnostics...");
+    eprintln!("✓ Running workspace health checks...\n");
     
-    let mut issues = Vec::new();
+    let mut issues: Vec<String> = Vec::new();
     
     // Check 1: Config syntax
     let config_path = Path::new(".cuedeck/config.toml");
@@ -335,22 +351,22 @@ async fn cmd_doctor(_repair: bool, json: bool) -> anyhow::Result<()> {
         match fs::read_to_string(config_path) {
             Ok(content) => {
                 if toml::from_str::<toml::Value>(&content).is_err() {
-                    issues.push("Invalid TOML syntax in config.toml");
+                    issues.push("Invalid TOML syntax in config.toml".to_string());
                 } else {
                     eprintln!("  [OK] Config syntax");
                 }
             }
             Err(_) => {
-                issues.push("Cannot read config.toml");
+                issues.push("Cannot read config.toml".to_string());
             }
         }
     } else {
-        issues.push("Missing .cuedeck/config.toml");
+        issues.push("Missing .cuedeck/config.toml".to_string());
     }
     
     // Check 2: Workspace structure
     if !Path::new(".cuedeck").exists() {
-        issues.push("Missing .cuedeck/ directory");
+        issues.push("Missing .cuedeck/ directory".to_string());
     } else {
         eprintln!("  [OK] Workspace structure");
     }
@@ -372,9 +388,37 @@ async fn cmd_doctor(_repair: bool, json: bool) -> anyhow::Result<()> {
         eprintln!("  [OK] Card frontmatter");
     }
     
-    // Check 4: Detect cycles
-    // TODO: Use cue_core::resolve_graph
-    eprintln!("  [OK] No circular dependencies");
+    // Check 4: Detect cycles using real graph logic
+    let mut all_docs = Vec::new();
+    if cards_dir.exists() {
+        for entry in walkdir::WalkDir::new(cards_dir) {
+            if let Ok(entry) = entry {
+                if entry.file_type().is_file() && entry.path().extension().map_or(false, |e| e == "md") {
+                    match cue_core::parse_file(entry.path()) {
+                        Ok(doc) => all_docs.push(doc),
+                        Err(_) => {} // Already warned in Check 3
+                    }
+                }
+            }
+        }
+    }
+    
+    // Build graph and check for cycles
+    match cue_core::graph::DependencyGraph::build(&all_docs) {
+        Ok(graph) => {
+            if let Some(cycle_path) = graph.detect_cycle() {
+                let cycle_str: Vec<String> = cycle_path.iter()
+                    .map(|p| p.file_name().unwrap_or_default().to_string_lossy().to_string())
+                    .collect();
+                issues.push(format!("Circular dependency: {}", cycle_str.join(" → ")));
+            } else {
+                eprintln!("  [OK] No circular dependencies");
+            }
+        }
+        Err(e) => {
+            eprintln!("  [WARN] Could not build graph: {}", e);
+        }
+    }
     
     if issues.is_empty() {
         eprintln!("\n✅ All checks passed!");
@@ -676,6 +720,87 @@ async fn cmd_watch() -> anyhow::Result<()> {
         }
     }
 
+    Ok(())
+}
+
+
+async fn cmd_graph(format: String, output: Option<String>, stats: bool) -> anyhow::Result<()> {
+    use std::fs;
+    use cue_core::graph::DependencyGraph;
+    use cue_core::graph_viz::{GraphFormat, render};
+    
+    let cwd = std::env::current_dir()?;
+    
+    // Collect all markdown documents
+    let mut all_docs = Vec::new();
+    
+    for entry in walkdir::WalkDir::new(&cwd)
+        .follow_links(true)
+        .into_iter()
+        .filter_entry(|e| {
+            let name = e.file_name().to_string_lossy();
+            !(name == "node_modules" || name == ".git" || name == "target" || name == "dist")
+        })
+    {
+        if let Ok(entry) = entry {
+            if entry.file_type().is_file() {
+                if let Some(ext) = entry.path().extension() {
+                    if ext == "md" {
+                        match cue_core::parse_file(entry.path()) {
+                            Ok(doc) => all_docs.push(doc),
+                            Err(e) => tracing::warn!("Failed to parse {:?}: {}", entry.path(), e),
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if all_docs.is_empty() {
+        eprintln!("⚠ No markdown files found in workspace");
+        return Ok(());
+    }
+    
+    // Build dependency graph
+    let graph = DependencyGraph::build(&all_docs)?;
+    
+    // Show statistics if requested
+    if stats {
+        let graph_stats = graph.stats();
+        eprintln!("Graph Statistics:");
+        eprintln!("  Nodes: {}", graph_stats.node_count);
+        eprintln!("  Edges: {}", graph_stats.edge_count);
+        eprintln!("  Cycles: {}", if graph_stats.has_cycles { "Yes" } else { "No" });
+        
+        if graph_stats.has_cycles {
+            if let Some(cycle) = graph.detect_cycle() {
+                let cycle_str: Vec<String> = cycle.iter()
+                    .map(|p| p.file_name().unwrap_or_default().to_string_lossy().to_string())
+                    .collect();
+                eprintln!("  Cycle: {}", cycle_str.join(" → "));
+            }
+        }
+        
+        let orphans = graph.orphans();
+        eprintln!("  Orphans: {} documents", orphans.len());
+        eprintln!();
+    }
+    
+    // Parse format
+    let graph_format = GraphFormat::from_str(&format)
+        .ok_or_else(|| anyhow::anyhow!("Invalid format: '{}'. Use: mermaid, dot, ascii, json", format))?;
+    
+    // Render graph
+    let rendered = render(&graph, graph_format);
+    
+    // Output to file or stdout
+    if let Some(output_path) = output {
+        fs::write(&output_path, &rendered)?;
+        eprintln!("✓ Graph written to {}", output_path);
+    } else {
+        println!("{}", rendered);
+    }
+    
     Ok(())
 }
 

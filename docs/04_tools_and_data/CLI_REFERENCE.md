@@ -97,6 +97,49 @@ Diagnoses workspace issues using the `miette` library for beautiful error report
   - `0`: All clear.
   - `1`: Issues found.
 
+### `cue graph`
+
+Visualize and analyze dependency graph of markdown documents.
+
+- **Usage**:
+
+  ```bash
+  cue graph [OPTIONS]
+  ```
+
+- **Flags**:
+  - `--format <FORMAT>`: Output format (`ascii`, `mermaid`, `dot`, `json`). Default: `ascii`.
+  - `--output <FILE>`: Write output to file instead of stdout.
+  - `--stats`: Show graph statistics (nodes, edges, cycles, orphans).
+
+- **Output Formats**:
+  - **`ascii`**: Terminal-friendly text representation
+  - **`mermaid`**: Mermaid flowchart syntax (for GitHub/docs)
+  - **`dot`**: Graphviz DOT format
+  - **`json`**: Machine-readable JSON structure
+
+- **Examples**:
+
+  ```bash
+  # Show ASCII visualization
+  cue graph
+  
+  # Export Mermaid diagram
+  cue graph --format mermaid --output docs/graph.md
+  
+  # Show statistics with visualization
+  cue graph --format ascii --stats
+  
+  # Export JSON for external tools
+  cue graph --format json --output graph.json
+  ```
+
+- **Graph Statistics** (with `--stats`):
+  - **Nodes**: Total documents in workspace
+  - **Edges**: Dependencies between documents
+  - **Cycles**: Whether circular dependencies exist
+  - **Orphans**: Documents with no incoming links
+
 ### `cue card`
 
 Manage implementation tasks.
