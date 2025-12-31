@@ -1,0 +1,346 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://cuedeck.dev/schemas/mcp-tools.json",
+  "title": "CueDeck MCP Tools Schema",
+  "description": "Complete JSON Schema for all MCP tool requests and responses",
+  "definitions": {
+    "read_context_request": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Keywords to match (e.g. 'auth flow')",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum number of results",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "read_context_response": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Relative path from workspace root"
+          },
+          "hash": {
+            "type": "string",
+            "description": "SHA256 hash of content"
+          },
+          "tokens": {
+            "type": "integer",
+            "description": "Token count"
+          },
+          "anchors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Top 3 headers/anchors"
+          }
+        },
+        "required": [
+          "path",
+          "hash",
+          "tokens"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "read_doc_request": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Relative path to file",
+          "pattern": "^[^.][a-zA-Z0-9_/.\\\\-]+\\.md$"
+        },
+        "anchor": {
+          "type": "string",
+          "description": "Optional Header name to slice from",
+          "maxLength": 100
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "read_doc_response": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string",
+          "description": "Markdown content (trimmed)"
+        },
+        "tokens": {
+          "type": "integer",
+          "description": "Estimated token count",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "content",
+        "tokens"
+      ],
+      "additionalProperties": false
+    },
+    "list_tasks_request": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "todo",
+            "active",
+            "done",
+            "archived"
+          ],
+          "description": "Filter tasks by status"
+        },
+        "assignee": {
+          "type": "string",
+          "description": "Optional filter by assignee name"
+        }
+      },
+      "additionalProperties": false
+    },
+    "list_tasks_response": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]{6}$"
+          },
+          "title": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ]
+          },
+          "assignee": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "priority"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "update_task_request": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]{6}$",
+          "description": "6-char alphanumeric task ID"
+        },
+        "updates": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "todo",
+                "active",
+                "done",
+                "archived"
+              ]
+            },
+            "assignee": {
+              "type": "string",
+              "maxLength": 50
+            },
+            "priority": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "critical"
+              ]
+            },
+            "notes": {
+              "type": "string",
+              "maxLength": 500
+            }
+          },
+          "minProperties": 1,
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "updates"
+      ],
+      "additionalProperties": false
+    },
+    "update_task_response": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]{6}$"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "todo",
+            "active",
+            "done",
+            "archived"
+          ]
+        },
+        "assignee": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priority": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "critical"
+          ]
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "status",
+        "updated_at",
+        "updated_fields"
+      ],
+      "additionalProperties": false
+    },
+    "error_response": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "description": "Error code (-32768 to -32000 for JSON-RPC, 1000+ for application)"
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable error message"
+        },
+        "data": {
+          "type": "object",
+          "description": "Additional error-specific data"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "title": "read_context",
+      "type": "object",
+      "properties": {
+        "jsonrpc": {
+          "const": "2.0"
+        },
+        "id": {
+          "type": [
+            "string",
+            "number",
+            "null"
+          ],
+          "description": "Request identifier"
+        },
+        "method": {
+          "const": "read_context"
+        },
+        "params": {
+          "$ref": "#/definitions/read_context_request"
+        }
+      },
+      "required": [
+        "jsonrpc",
+        "method"
+      ]
+    },
+    {
+      "title": "read_doc",
+      "type": "object",
+      "properties": {
+        "method": {
+          "const": "read_doc"
+        },
+        "params": {
+          "$ref": "#/definitions/read_doc_request"
+        }
+      }
+    },
+    {
+      "title": "list_tasks",
+      "type": "object",
+      "properties": {
+        "method": {
+          "const": "list_tasks"
+        },
+        "params": {
+          "$ref": "#/definitions/list_tasks_request"
+        }
+      }
+    },
+    {
+      "title": "update_task",
+      "type": "object",
+      "properties": {
+        "method": {
+          "const": "update_task"
+        },
+        "params": {
+          "$ref": "#/definitions/update_task_request"
+        }
+      }
+    }
+  ]
+}

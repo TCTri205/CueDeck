@@ -2,6 +2,71 @@
 
 This document provides templates for governance files used by CueDeck's agent system.
 
+## Canonical Token Budgets (Single Source of Truth)
+
+These are the **recommended default** token budgets used by the Core Team. Individual projects can override these in `.cuedeck/config.toml`.
+
+| Workflow Type | Total Budget | Breakdown |
+| :------------ | :----------- | :-------- |
+| **Feature Development** | **6000** | project context: 2000, files: 2500, rules: 1000, free: 500 |
+| **Bug Fix** | **4000** | error message: 500, code: 2000, similar bugs: 1000, free: 500 |
+| **Refactoring** | **5000** | module: 2500, dependencies: 1500, standards: 800, free: 200 |
+| **Review** | **3000** | changes: 1500, context: 1000, checklists: 500 |
+
+### Implementation Reference
+
+These budgets are enforced in [`cue_config/src/lib.rs`](file:///d:/Projects_IT/CueDeck/crates/cue_config/src/lib.rs) via the `TokenBudgets` struct:
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenBudgets {
+    #[serde(default = "default_feature_budget")]
+    pub feature: usize,  // 6000
+    
+    #[serde(default = "default_bugfix_budget")]
+    pub bugfix: usize,   // 4000
+    
+    #[serde(default = "default_refactor_budget")]
+    pub refactor: usize, // 5000
+}
+```
+
+### Token Budget Recalibration Policy
+
+**Algorithm**: Projects should periodically review token usage and adjust budgets based on:
+
+```text
+score = (references × 0.3) + (recent_changes × 0.35) + (in_error_stack × 0.35)
+```
+
+**Adjustment Rules**:
+
+- **Every 2 weeks**: Review average token usage per workflow type
+- **If avg usage > 90% budget**: Increase budget by 20%
+- **If avg usage < 50% budget**: Consider reducing or investigating inefficiencies
+- **Document changes**: Update `.cuedeck/config.toml` with rationale
+
+**Example Calculation**:
+
+```toml
+# .cuedeck/config.toml
+[budgets]
+feature = 7200  # Increased from 6000 due to 95% average usage
+bugfix = 4000   # Unchanged
+refactor = 4500 # Reduced from 5000 due to 40% average usage
+
+# Rationale: Large codebase with complex feature interdependencies
+```
+
+### Owner and Update Frequency
+
+- **Owner**: Core Team (`@core-team`)
+- **Review Cycle**: Quarterly
+- **Last Updated**: 2025-12-31
+- **Next Review**: 2026-03-31
+
+---
+
 ## 1. Security Rules Template
 
 **File**: `.cuedeck/security.rules`
@@ -296,7 +361,7 @@ Output: Merged + deployed
 ## 8. Governance Maintenance Schedule
 
 | Period | Task |
-|--------|------|
+| :----- | :--- |
 | **Weekly** | Review security.rules against new CVEs, check package updates |
 | **Monthly** | Review code for naming violations, analyze workflow metrics |
 | **Quarterly** | Major governance review, update architecture guidelines |

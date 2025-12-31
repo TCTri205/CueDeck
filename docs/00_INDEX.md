@@ -2,19 +2,23 @@
 
 **Welcome to CueDeck.** This index maps the entire knowledge base.
 
-> **Last Updated**: 2025-12-30 | **Total Files**: 35
+> **Last Updated**: 2025-12-31 | **Total Files**: 44
 
 ## 📚 1. Start Here (Orientation)
 
 | File | Purpose |
 | :--- | :--- |
 | [`01_general/PROJECT_OVERVIEW.md`](./01_general/PROJECT_OVERVIEW.md) | High-level Goal, Value Prop, Scope. |
+| [`01_general/QUICK_START.md`](./01_general/QUICK_START.md) | **New Developer**: Build & Run in 10 min. |
+| [`01_general/FAQ.md`](./01_general/FAQ.md) | Common Questions & Answers. |
 | [`01_general/USER_STORIES.md`](./01_general/USER_STORIES.md) | "As a User" requirements. |
 | [`01_general/GLOSSARY.md`](./01_general/GLOSSARY.md) | Definitions (Card, Anchor, Hot Path). |
 | [`01_general/ROADMAP.md`](./01_general/ROADMAP.md) | Implementation phases and milestones. |
 | [`01_general/CONTRIBUTING.md`](./01_general/CONTRIBUTING.md) | Setup, PRs, Versioning. |
 | [`01_general/CHANGELOG.md`](./01_general/CHANGELOG.md) | Version History. |
 | [`01_general/CLI_UX_FLOWS.md`](./01_general/CLI_UX_FLOWS.md) | Visual TUI Guide. |
+| [`01_general/ARCHITECTURE_DECISIONS.md`](./01_general/ARCHITECTURE_DECISIONS.md) | **New!** ADRs: Why Rust, Graph, MCP, Local-First. |
+| [`01_general/DEVELOPMENT_GUIDE.md`](./01_general/DEVELOPMENT_GUIDE.md) | IDE Setup, Debugging, Profiling, Common Tasks. |
 
 ## 🏗️ 2. Architecture (The "What")
 
@@ -29,6 +33,7 @@
 | [`02_architecture/TECH_STACK.md`](./02_architecture/TECH_STACK.md) | Dependencies (`Cargo.toml`). |
 | [`02_architecture/ARCHITECTURE_RULES.md`](./02_architecture/ARCHITECTURE_RULES.md) | Layered Architecture, Import Rules, Constraints. |
 | [`02_architecture/IMPLEMENTATION_PATTERNS.md`](./02_architecture/IMPLEMENTATION_PATTERNS.md) | Compression, Change Detection, Scoring Patterns. |
+| [`02_architecture/PERFORMANCE_OPTIMIZATION.md`](./02_architecture/PERFORMANCE_OPTIMIZATION.md) | **New!** Cache optimization, Profiling, Benchmarking. |
 
 ## 🤖 3. Agent Design (The "Why")
 
@@ -51,6 +56,7 @@
 | [`04_tools_and_data/API_DOCUMENTATION.md`](./04_tools_and_data/API_DOCUMENTATION.md) | Internal Rust APIs, Compression, Validation, Session APIs. |
 | [`04_tools_and_data/CLI_REFERENCE.md`](./04_tools_and_data/CLI_REFERENCE.md) | Arguments, Flags, Help Text. |
 | [`04_tools_and_data/CONFIGURATION_REFERENCE.md`](./04_tools_and_data/CONFIGURATION_REFERENCE.md) | TOML Spec, Defaults, Env Vars. |
+| [`04_tools_and_data/DATA_SCHEMA.md`](./04_tools_and_data/DATA_SCHEMA.md) | Formal JSON/YAML Schemas & Validation. |
 | [`04_tools_and_data/KNOWLEDGE_BASE_STRUCTURE.md`](./04_tools_and_data/KNOWLEDGE_BASE_STRUCTURE.md) | File Formats (Frontmatter, Cache). |
 
 ## 🛡️ 5. Quality & Ops (The "How")
@@ -62,4 +68,41 @@
 | [`05_quality_and_ops/EVALUATION_METRICS.md`](./05_quality_and_ops/EVALUATION_METRICS.md) | Performance KPIs, Token Efficiency, Measurement Cadence. |
 | [`05_quality_and_ops/TROUBLESHOOTING.md`](./05_quality_and_ops/TROUBLESHOOTING.md) | Fixes for common errors. |
 | [`05_quality_and_ops/RISK_MANAGEMENT.md`](./05_quality_and_ops/RISK_MANAGEMENT.md) | Risk Matrix & Mitigations. |
+| [`05_quality_and_ops/ERROR_CATALOG.md`](./05_quality_and_ops/ERROR_CATALOG.md) | **New!** Error codes & Recovery steps. |
+| [`05_quality_and_ops/DEPLOYMENT_GUIDE.md`](./05_quality_and_ops/DEPLOYMENT_GUIDE.md) | Installation & Distribution. |
+| [`05_quality_and_ops/MAINTENANCE_GUIDE.md`](./05_quality_and_ops/MAINTENANCE_GUIDE.md) | **New!** Daily/Weekly tasks, Backup, DR. |
 
+---
+
+## 📖 6. Recommended Reading Paths
+
+### For New Contributors
+
+1. [PROJECT_OVERVIEW.md](./01_general/PROJECT_OVERVIEW.md) - Understand the vision
+2. [QUICK_START.md](./01_general/QUICK_START.md) - Build and run in 10 min
+3. [ARCHITECTURE_DECISIONS.md](./01_general/ARCHITECTURE_DECISIONS.md) - Why we made key choices
+4. [CONTRIBUTING.md](./01_general/CONTRIBUTING.md) - How to contribute
+
+### For System Architects
+
+1. [SYSTEM_ARCHITECTURE.md](./02_architecture/SYSTEM_ARCHITECTURE.md) - High-level design
+2. [MODULE_DESIGN.md](./02_architecture/MODULE_DESIGN.md) - Rust structs & traits
+3. [ALGORITHMS.md](./02_architecture/ALGORITHMS.md) - Core algorithms
+4. [PERFORMANCE_OPTIMIZATION.md](./02_architecture/PERFORMANCE_OPTIMIZATION.md) - Speed & efficiency
+
+### For AI Integration Developers
+
+1. [TOOLS_SPEC.md](./04_tools_and_data/TOOLS_SPEC.md) - MCP tool schemas
+2. [PROMPTS_AND_INSTRUCTIONS.md](./03_agent_design/PROMPTS_AND_INSTRUCTIONS.md) - System prompts
+3. [MEMORY_STRATEGY.md](./03_agent_design/MEMORY_STRATEGY.md) - Context management
+4. [EXAMPLES.md](./03_agent_design/EXAMPLES.md) - Concrete usage
+
+### For DevOps Engineers
+
+1. [DEPLOYMENT_GUIDE.md](./05_quality_and_ops/DEPLOYMENT_GUIDE.md) - Installation & distribution
+2. [MAINTENANCE_GUIDE.md](./05_quality_and_ops/MAINTENANCE_GUIDE.md) - Operational tasks
+3. [LOGGING_AND_TELEMETRY.md](./05_quality_and_ops/LOGGING_AND_TELEMETRY.md) - Monitoring
+4. [TROUBLESHOOTING.md](./05_quality_and_ops/TROUBLESHOOTING.md) - Common issues
+
+---
+**Quick Search**: Use Ctrl+F to find specific topics. All file paths are clickable links.

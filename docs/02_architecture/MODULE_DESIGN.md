@@ -2,6 +2,29 @@
 
 This document defines the Structs, Enums, and Traits for the core crates.
 
+## Implementation References
+
+The following table links design specifications to their actual implementations:
+
+| Struct/Type | Implemented At | Test File |
+| :---------- | :------------- | :-------- |
+| `CueError` | [cue_common/src/lib.rs](file:///d:/Projects_IT/CueDeck/crates/cue_common/src/lib.rs) | - |
+| `Document` | [cue_common/src/lib.rs](file:///d:/Projects_IT/CueDeck/crates/cue_common/src/lib.rs) | - |
+| `Anchor` | [cue_common/src/lib.rs](file:///d:/Projects_IT/CueDeck/crates/cue_common/src/lib.rs) | - |
+| `Config` | [cue_config/src/lib.rs](file:///d:/Projects_IT/CueDeck/crates/cue_config/src/lib.rs) | - |
+| `TokenBudgets` | [cue_config/src/lib.rs](file:///d:/Projects_IT/CueDeck/crates/cue_config/src/lib.rs) | - |
+| `parse_file()` | [cue_core/src/lib.rs](file:///d:/Projects_IT/CueDeck/crates/cue_core/src/lib.rs) | `tests::test_parse_file_stub` |
+| `generate_scene()` | [cue_core/src/lib.rs](file:///d:/Projects_IT/CueDeck/crates/cue_core/src/lib.rs) | - |
+| `search_workspace()` | [cue_core/src/context.rs](file:///d:/Projects_IT/CueDeck/crates/cue_core/src/context.rs) | `context::tests::test_search_workspace` |
+| `JsonRpcRequest` | [cue_mcp/src/lib.rs](file:///d:/Projects_IT/CueDeck/crates/cue_mcp/src/lib.rs) | `tests::test_ping` |
+| `handle_request()` | [cue_mcp/src/lib.rs](file:///d:/Projects_IT/CueDeck/crates/cue_mcp/src/lib.rs) | `tests::test_ping` |
+| CLI Commands | [cue_cli/src/main.rs](file:///d:/Projects_IT/CueDeck/crates/cue_cli/src/main.rs) | - |
+
+> [!NOTE]
+> This table maps design documents to scaffold implementations. Full implementations will be added as development progresses.
+
+---
+
 ## 1. `cue_core` (The Brain)
 
 ### Constants
@@ -59,14 +82,110 @@ pub struct Workspace {
 }
 ```
 
+### Core Data Structures (Class Diagram)
+
+```mermaid
+classDiagram
+    class Workspace {
+        +PathBuf root
+        +Config config
+        +CacheManager cache
+        +Graph dag
+    }
+    
+    class Config {
+        +CoreConfig core
+        +ParserConfig parser
+        +SecurityConfig security
+    }
+    
+    class Document {
+        +PathBuf path
+        +String hash
+        +Vec~Anchor~ anchors
+        +usize tokens
+    }
+    
+    class Graph {
+        +HashMap nodes
+        +HashMap edges
+        +resolve()
+    }
+    
+    Workspace *-- Config
+    Workspace *-- Graph
+    Graph o-- Document : manages
+```
+
 ### Traits
 
 ```rust
-pub trait ContextSource {
-    fn resolve(&self, query: &str) -> Result<Vec<Snippet>>;
-    fn content(&self, path: &Path, range: Option<Range>) -> Result<String>;
+/// A source that can provide context snippets based on queries.
+/// 
+/// # Errors
+/// 
+/// All methods return `Result<T, CueError>` with the following possible errors:
+/// 
+/// * `CueError::FileNotFound` (code 1001) - If the requested file/path does not exist
+/// * `CueError::TokenLimit` (code 1003) - If the result would exceed token budget  
+/// * `CueError::StaleCache` (code 1006) - If cached data is outdated (hash mismatch)
+/// * `CueError::IoError` - For generic I/O failures
+/// A source that can provide context snippets based on queries.
+pub mod context {
+    /// Search for context snippets matching the query.
+    /// 
+    /// # Arguments
+    /// * `root` - Workspace root path
+    /// * `query` - Search terms
+    /// 
+    /// # Returns
+    /// Top 10 documents ordered by relevance score (Filename > Content)
+    pub fn search_workspace(root: &Path, query: &str) -> Result<Vec<Document>>;
 }
 ```
+
+### Struct Invariants
+
+#### `Document` Invariants
+
+- **hash**: Must be valid SHA-256 hex string (64 characters, lowercase)
+- **anchors**: Must be sorted by `start_line` (ascending order)
+- **tokens**: Must be ≥ 0, recalculated when content changes
+- **path**: Must be normalized absolute path or workspace-relative path
+- **frontmatter**: If present, must be valid YAML
+
+**Edge Cases**:
+
+- Empty document (0 anchors): Valid, tokens = minimal overhead
+- Document with only frontmatter: Valid, anchors = []
+- Duplicate anchor names: Allowed, distinguished by line numbers
+
+#### `Anchor` Invariants
+
+- **level**: Must be in range [1, 6] (markdown heading levels)
+- **start_line**: Must be > 0 (1-indexed)
+- **end_line**: Must satisfy `end_line >= start_line`
+- **header**: Cannot be empty string
+- **slug**: Must be URL-safe (lowercase, hyphens, no special chars)
+
+**Edge Cases**:
+
+- Anchor at EOF: `end_line` = last line of file
+- Adjacent anchors: `anchor1.end_line + 1 = anchor2.start_line`
+- Nested anchors: Level 2 under Level 1 is valid
+
+#### `Workspace` Invariants
+
+- **root**: Must exist and be a directory
+- **config**: Must be valid (validated on load)
+- **dag**: Must be acyclic (enforced by cycle detection)
+- **cache**: Hash consistency maintained by CacheManager
+
+**Edge Cases**:
+
+- Empty workspace (.cuedeck exists but no cards/docs): Valid
+- Workspace with only archived cards: Valid, dag may be empty
+- Corrupted cache: Auto-rebuild triggered on hash mismatch
 
 ## 2. `cue_config` (Settings)
 
@@ -128,6 +247,8 @@ pub enum Commands {
     Scene {
         #[arg(long, short)]
         dry_run: bool,
+        #[arg(long)]
+        token_limit: Option<usize>,
     },
     /// Start the file watcher daemon
     Watch,
@@ -140,6 +261,10 @@ pub enum Commands {
     },
     /// Clean cache directory
     Clean,
+    /// Self-update to latest version
+    Upgrade,
+    /// Start MCP Server (AI Integration)
+    Mcp,
 }
 
 #[derive(Subcommand)]
@@ -193,6 +318,16 @@ pub struct FileIndexEntry {
     pub importance: f32,
     pub recently_used: bool,
     pub modification_count: u32,
+}
+
+pub struct Pruner {
+    pub max_tokens: usize,
+    pub strategy: PruningStrategy, // Knapsack, Greedy, etc.
+}
+
+pub struct SecretGuard {
+    pub patterns: Vec<Regex>,
+    pub whitelist: Vec<String>,
 }
 ```
 

@@ -1,0 +1,229 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://cuedeck.dev/schemas/security-patterns.json",
+    "title": "CueDeck Security Patterns",
+    "description": "Machine-readable security pattern definitions for secret detection",
+    "type": "object",
+    "properties": {
+        "version": {
+            "type": "string",
+            "description": "Schema version",
+            "pattern": "^\\d+\\.\\d+$"
+        },
+        "patterns": {
+            "type": "array",
+            "description": "List of security patterns",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "Unique pattern identifier",
+                        "pattern": "^[a-z0-9_-]+$"
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Human-readable pattern name"
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "api_keys",
+                            "database_credentials",
+                            "private_keys",
+                            "jwt_tokens",
+                            "unsafe_code",
+                            "dangerous_config"
+                        ]
+                    },
+                    "regex": {
+                        "type": "string",
+                        "description": "Regular expression pattern"
+                    },
+                    "severity": {
+                        "type": "string",
+                        "enum": [
+                            "LOW",
+                            "MEDIUM",
+                            "HIGH",
+                            "CRITICAL"
+                        ],
+                        "description": "Severity level"
+                    },
+                    "action": {
+                        "type": "string",
+                        "enum": [
+                            "redact",
+                            "block",
+                            "warn"
+                        ],
+                        "description": "Action to take when matched"
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Error/warning message"
+                    },
+                    "fix_suggestion": {
+                        "type": "string",
+                        "description": "Recommended fix"
+                    },
+                    "languages": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Applicable programming languages (optional)"
+                    },
+                    "test_cases": {
+                        "type": "object",
+                        "properties": {
+                            "should_match": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "description": "Strings that should trigger this pattern"
+                            },
+                            "should_not_match": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "description": "Strings that should NOT trigger (false positives)"
+                            }
+                        },
+                        "required": [
+                            "should_match",
+                            "should_not_match"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "category",
+                    "regex",
+                    "severity",
+                    "action",
+                    "message",
+                    "test_cases"
+                ],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": [
+        "version",
+        "patterns"
+    ],
+    "examples": [
+        {
+            "version": "1.0",
+            "patterns": [
+                {
+                    "id": "openai-api-key",
+                    "name": "OpenAI API Key",
+                    "category": "api_keys",
+                    "regex": "sk-[a-zA-Z0-9]{20,}",
+                    "severity": "CRITICAL",
+                    "action": "redact",
+                    "message": "OpenAI API key detected",
+                    "fix_suggestion": "Use environment variables instead of hardcoding keys",
+                    "test_cases": {
+                        "should_match": [
+                            "sk-1234567890abcdef1234567890",
+                            "My key is sk-proj-abcdefghijklmnopqrstuvwxyz1234567890"
+                        ],
+                        "should_not_match": [
+                            "sk-123",
+                            "fake-sk-key"
+                        ]
+                    }
+                },
+                {
+                    "id": "mongodb-connection",
+                    "name": "MongoDB Connection String",
+                    "category": "database_credentials",
+                    "regex": "mongodb(\\+srv)?://[^@]*:[^@]*@",
+                    "severity": "CRITICAL",
+                    "action": "block",
+                    "message": "MongoDB credentials detected in connection string",
+                    "fix_suggestion": "Use environment variables for database credentials",
+                    "test_cases": {
+                        "should_match": [
+                            "mongodb://user:password@localhost:27017",
+                            "mongodb+srv://admin:secret@cluster.mongodb.net"
+                        ],
+                        "should_not_match": [
+                            "mongodb://localhost:27017",
+                            "mongodb+srv://cluster.mongodb.net"
+                        ]
+                    }
+                },
+                {
+                    "id": "rsa-private-key",
+                    "name": "RSA Private Key",
+                    "category": "private_keys",
+                    "regex": "-----BEGIN (RSA|ECDSA) PRIVATE KEY-----",
+                    "severity": "CRITICAL",
+                    "action": "block",
+                    "message": "Private cryptographic key detected in source code",
+                    "fix_suggestion": "Store private keys in secure vault, not in code",
+                    "test_cases": {
+                        "should_match": [
+                            "-----BEGIN RSA PRIVATE KEY-----",
+                            "-----BEGIN ECDSA PRIVATE KEY-----"
+                        ],
+                        "should_not_match": [
+                            "-----BEGIN PUBLIC KEY-----",
+                            "-----BEGIN CERTIFICATE-----"
+                        ]
+                    }
+                },
+                {
+                    "id": "jwt-token",
+                    "name": "JWT Token",
+                    "category": "jwt_tokens",
+                    "regex": "eyJ[A-Za-z0-9_-]+\\.eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]{40,}",
+                    "severity": "HIGH",
+                    "action": "redact",
+                    "message": "JWT token detected - will be redacted for agent",
+                    "fix_suggestion": "Do not hardcode JWT tokens",
+                    "test_cases": {
+                        "should_match": [
+                            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+                        ],
+                        "should_not_match": [
+                            "eyJhbGciOiJIUzI1NiJ9.short",
+                            "not-a-jwt-token"
+                        ]
+                    }
+                },
+                {
+                    "id": "eval-javascript",
+                    "name": "JavaScript eval()",
+                    "category": "unsafe_code",
+                    "regex": "eval\\s*\\(",
+                    "severity": "CRITICAL",
+                    "action": "block",
+                    "message": "eval() is unsafe - use safe alternatives",
+                    "fix_suggestion": "Use JSON.parse() or safer alternatives instead of eval()",
+                    "languages": [
+                        "javascript",
+                        "typescript"
+                    ],
+                    "test_cases": {
+                        "should_match": [
+                            "eval(userInput)",
+                            "window.eval('code')"
+                        ],
+                        "should_not_match": [
+                            "evaluate()",
+                            "// eval() is dangerous"
+                        ]
+                    }
+                }
+            ]
+        }
+    ]
+}

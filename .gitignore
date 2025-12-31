@@ -1,0 +1,26 @@
+# Rust build artifacts
+/target/
+**/target/
+
+# Cargo lock (keep for binaries, ignore for libraries)
+Cargo.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# CueDeck workspace files
+.cuedeck/.cache/
+.cuedeck/logs/
+*.log
+
+# Test artifacts
+*.profraw
+*.profdata

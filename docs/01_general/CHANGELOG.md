@@ -7,31 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [2.1.0] - 2025-12-31
 
-### Added
+### Added (New Features)
 
-- Initial documentation structure.
+- **Context Search**: `cue open` now uses fuzzy search to find files and content instantly.
+- **Real-time Watcher**: `cue watch` auto-regenerates the scene and updates the clipboard on file changes.
+- **MCP Server**: Full implementation of `read_context`, `read_doc`, `list_tasks`, `create_task`, `update_task`.
+- **Core Logic**: Robust Frontmatter parsing, Link detection, Cycle detection, and Graph resolution.
+- **Task Management**: Create, Update, and List tasks via CLI and MCP.
+- **CLI Refactor**: Unified `cue_core` logic for all commands.
+- **Self-Update**: `cue upgrade` checks for new GitHub releases.
+- **Security**: Secret masking for API keys in all outputs.
 
----
+### Documentation
 
-## [2.1.0] - 2024-XX-XX (Target Release)
+- Complete documentation suite (Architecture, Tools Spec, CLI Reference).
 
-### Added
+### Fixed
 
-- **Rust Workspace Architecture**: Modularized into `cue_common`, `cue_config`, `cue_core`, `cue_cli`, `cue_mcp`.
-- **Incremental Parser**: SHA256-based change detection for <5ms hot-path.
-- **Lazy Garbage Collection**: Self-healing cache that purges stale entries on access.
-- **Granular Anchor Resolution**: Extract specific sections using `@path#Header` syntax.
-- **Token Budgeting**: Greedy pruning algorithm to fit LLM context windows.
-- **MCP Server (`cue_mcp`)**: JSON-RPC 2.0 over Stdio with strict I/O isolation.
-- **Secret Masking**: Regex-based guard to prevent API key leakage.
-- **CLI Commands**: `cue init`, `cue open`, `cue scene`, `cue watch`, `cue doctor`, `cue clean`.
-- **TUI**: Interactive fuzzy finder using `skim`.
-
-### Security
-
-- Default patterns for OpenAI, GitHub, AWS, and Slack secrets.
+- **Graph Resolution**: Correctly handles circular dependencies.
+- **Parsing**: Robust regex for various frontmatter formats.
 
 ---
 

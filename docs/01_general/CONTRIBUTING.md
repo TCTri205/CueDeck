@@ -1,6 +1,10 @@
 # Contributing to CueDeck
 
-## 1. Development Environment Setup
+**New to CueDeck?** Start with [QUICK_START.md](./QUICK_START.md) to get set up in 10 minutes.
+
+---
+
+## 1. Environment Setup
 
 CueDeck is a standard Rust project. You need `rustup` and `cargo` installed.
 
@@ -15,8 +19,8 @@ CueDeck is a standard Rust project. You need `rustup` and `cargo` installed.
 ### Setup Command
 
 ```bash
-# Clone repository
-git clone https://github.com/your-org/cuedeck.git
+# Clone repository (thay <YOUR_ORG> bằng org thực tế)
+git clone https://github.com/<YOUR_ORG>/cuedeck.git
 cd cuedeck
 
 # Install dev tools
@@ -52,6 +56,46 @@ cargo test --workspace
 2. **Conventional Commits**: e.g., `feat(parser): add separate frontmatter parsing`.
 3. **Review**: At least one approval required. All CI checks must pass.
 
+### PR Template
+
+When creating a pull request, include:
+
+```markdown
+## Description
+Brief summary of changes and motivation.
+
+## Type of Change
+- [ ] Bug fix (non-breaking change fixing an issue)
+- [ ] New feature (non-breaking change adding functionality)
+- [ ] Breaking change (fix or feature causing existing functionality to change)
+- [ ] Documentation update
+
+## Testing
+- [ ] Unit tests pass (`cargo test --workspace`)
+- [ ] Snapshot tests pass (`cargo insta test`)
+- [ ] Manual testing completed
+
+## CI Checklist
+- [ ] Code formatted (`cargo fmt --all -- --check`)
+- [ ] No clippy warnings (`cargo clippy --workspace -- -D warnings`)
+- [ ] All tests pass (`cargo nextest run`)
+- [ ] Documentation updated (if applicable)
+- [ ] JSON schemas validated (if schemas changed)
+```
+
+### CI Fail Conditions
+
+Your PR will be blocked if:
+
+- ❌ Any test fails
+- ❌ Code not formatted  
+- ❌ Clippy warnings exist
+- ❌ Coverage drops below threshold
+- ❌ `cue doctor` finds issues
+- ❌ Broken doc links
+
+See [TESTING_STRATEGY.md](../05_quality_and_ops/TESTING_STRATEGY.md#ci-fail-conditions) for details.
+
 ## 4. How-To Guides
 
 ### Add a New CLI Command
@@ -66,6 +110,16 @@ cargo test --workspace
 1. **Edit `crates/cue_mcp/src/lib.rs`**: Add variant to `McpRequest` enum (e.g., `NewTool`).
 2. **Edit `crates/cue_mcp/src/router.rs`**: Add Logic in `handle_request()`.
 3. **Spec**: Update `docs/04_tools_and_data/TOOLS_SPEC.md` with JSON Schema.
+
+### Implementing Core Features
+
+When adding features to `cue_core`:
+
+1. **Types**: Define new types in `cue_common/src/types.rs`.
+2. **Errors**: Add error variants to `cue_common/src/errors.rs`.
+3. **Logic**: Implement in appropriate `cue_core/src/*.rs` module.
+4. **Test**: Add unit tests in the same file + integration tests in `tests/`.
+5. **Docs**: Update `MODULE_DESIGN.md` and `API_DOCUMENTATION.md`.
 
 ## 5. Release Process
 

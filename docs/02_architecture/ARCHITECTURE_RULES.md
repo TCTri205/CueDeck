@@ -2,48 +2,53 @@
 
 This document defines the architecture rules and constraints for the CueDeck project.
 
-## 1. Layered Architecture
+## 1. Rust Workspace Architecture
 
-Every project MUST follow this structure:
+CueDeck follows a modular Rust Workspace architecture:
 
 ```text
-src/
-├── api/              # API routes & controllers
-├── services/         # Business logic
-├── models/           # Data models & types
-├── utils/            # Utility functions
-├── middleware/       # HTTP middleware
-├── config/           # Configuration
-├── tests/            # Test files
-└── index.ts          # Entry point
+cuedeck-workspace/
+├── Cargo.toml              # Workspace definition
+├── crates/
+│   ├── cue_common/         # Shared types, errors, constants
+│   ├── cue_config/         # Configuration loading/merging
+│   ├── cue_core/           # Business logic (parser, cache, DAG)
+│   ├── cue_cli/            # User-facing CLI/TUI
+│   └── cue_mcp/            # MCP Server (JSON-RPC)
+└── tests/                  # Integration tests
 ```
 
-**Why:** Separation of concerns, testability, scalability.
+**Dependency Direction**: `cue_cli` → `cue_core` → `cue_config` → `cue_common`
 
-## 2. Module Import Rules
+**Why:** Separation of concerns, independent versioning, faster incremental builds.
+
+## 2. Crate Dependency Rules
 
 ### Allowed Dependencies
 
 ```text
-Level 1: Services import from models
-Level 2: Controllers import from services
-Level 3: API imports from controllers
+cue_cli  → cue_core, cue_config, cue_common
+cue_mcp  → cue_core, cue_config, cue_common
+cue_core → cue_config, cue_common
+cue_config → cue_common
+cue_common → (external crates only)
 
-Data flows DOWN: api → services → models
+Data flows DOWN: CLI/MCP → Core → Config → Common
 ```
 
 ### Forbidden Patterns
 
-- ❌ Cross-level imports (creates circular dependencies)
-- ❌ Circular imports between files
-- ❌ Skipping layers (API directly calling database)
+- ❌ Circular crate dependencies
+- ❌ `cue_common` importing from other cue_* crates
+- ❌ Direct file I/O in `cue_common` (types only)
 
 ## 3. Type Safety Requirements
 
 **REQUIRED:**
+
 - All functions MUST have explicit return types
 - All parameters MUST be typed
-- No `any` type allowed (unless approved exception)
+- Avoid `dyn Any` and type erasure unless justified
 
 ```rust
 // ✅ Good
@@ -60,6 +65,7 @@ fn get_user_by_id(id: &str) {
 ## 4. Error Handling
 
 **REQUIRED:**
+
 - All async functions must have error handling
 - Custom error types for domain errors
 - Errors must be propagated with context
@@ -76,19 +82,16 @@ pub enum CueError {
 ## 5. Testing Requirements
 
 **MANDATORY:**
+
 - All business logic (services) must have tests
 - Minimum 80% code coverage for critical paths
 - Unit + integration tests required
 
 ```text
 tests/
-├── unit/
-│   ├── services/
-│   │   └── *_test.rs
-│   └── utils/
-├── integration/
-│   └── api/
-└── e2e/
+├── snapshot_scene.rs        # Output verification
+├── watcher_integration.rs   # Async flows
+└── mcp_protocol.rs          # JSON-RPC tests
 ```
 
 ## 6. Configuration Management
@@ -106,6 +109,7 @@ let api_timeout = config.api.timeout; // from config
 ## 7. Dependency Management
 
 **RULES:**
+
 - No circular dependencies
 - Dependencies must form a DAG (directed acyclic graph)
 - Use dependency injection for testability
@@ -113,23 +117,26 @@ let api_timeout = config.api.timeout; // from config
 ## 8. Performance Constraints
 
 | Metric | Target | Failure Threshold |
-|--------|--------|-------------------|
-| **API responses** | < 200ms (p95) | > 500ms |
-| **Database queries** | < 100ms (p95) | > 300ms |
+| :--- | :--- | :--- |
+| **CLI responses** | < 200ms (p95) | > 500ms |
+| **File parsing** | < 100ms (p95) | > 300ms |
 | **Memory usage** | < 500MB | > 1GB |
-| **N+1 queries** | 0 | Any detected |
+| **Cache hit rate** | > 95% | < 80% |
 
 ## 9. Security Requirements
 
 **MANDATORY:**
-- Input validation on all API endpoints
-- SQL injection prevention (parameterized queries)
-- XSS prevention (sanitize output)
-- Rate limiting on endpoints
+
+- Input validation on all MCP tool inputs
+- Path traversal prevention (reject `..` in paths)
+- Secret masking before any output
+- No `unsafe` blocks without explicit justification
+- Sandbox file access to workspace directory only
 
 ## 10. Logging Requirements
 
 **REQUIRED:**
+
 - All critical operations logged
 - Structured logging (JSON format)
 - Error tracking with context

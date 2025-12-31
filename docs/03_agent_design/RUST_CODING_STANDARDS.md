@@ -110,8 +110,8 @@ mod UserService; // ❌
 
 ```text
 // Files: snake_case.rs
-src/user_service.rs ✅
-src/UserService.rs ❌
+crates/cue_core/src/user_service.rs ✅
+crates/cue_core/src/UserService.rs ❌
 ```
 
 ---

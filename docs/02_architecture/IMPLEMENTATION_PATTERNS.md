@@ -190,5 +190,51 @@ const regex = /^(?:from|import)\s+([^\s]+)/gm;
 const regex = /use\s+(?:crate::)?([^;]+)/g;
 ```
 
+## 8. Anti-Patterns
+
+### Over-reliance on LLM for Trivial Tasks
+
+- **Problem**: Wastes token budget, slows down workflow, can introduce subtle errors.
+- **Solution**: Define clear boundaries for LLM interaction. Use for complex logic, boilerplate generation, or creative problem-solving, not simple refactoring or syntax fixes.
+
+### Lack of Deterministic Output
+
+- **Problem**: LLM output varies, making testing and integration difficult.
+- **Solution**: Implement strict output formats (JSON, specific markdown structures), provide examples, and use few-shot prompting. Post-process LLM output to normalize.
+
+### Context Overload
+
+- **Problem**: Providing too much irrelevant context dilutes important information and increases token usage.
+- **Solution**: Implement aggressive context compression, intelligent filtering based on task relevance, and multi-stage prompting where context is revealed incrementally.
+
+## 9. Refactoring Recipes
+
+### Extract Function/Component
+
+```text
+1. Identify a block of code with a single responsibility.
+2. Define clear inputs and outputs for the new function/component.
+3. Replace the original block with a call to the new function/component.
+4. Update tests to cover the new unit.
+```
+
+### Introduce Explaining Variable
+
+```text
+1. Identify a complex expression or a magic number.
+2. Create a new variable with a descriptive name.
+3. Assign the complex expression/magic number to the new variable.
+4. Replace the original expression/number with the new variable.
+```
+
+### Consolidate Duplicate Code
+
+```text
+1. Identify identical or very similar code blocks across multiple locations.
+2. Extract the common logic into a shared function, class, or module.
+3. Replace the duplicate blocks with calls to the shared logic.
+4. Ensure all original use cases are still covered.
+```
+
 ---
 **Related Docs**: [ALGORITHMS.md](./ALGORITHMS.md), [MODULE_DESIGN.md](./MODULE_DESIGN.md), [API_DOCUMENTATION.md](../04_tools_and_data/API_DOCUMENTATION.md)

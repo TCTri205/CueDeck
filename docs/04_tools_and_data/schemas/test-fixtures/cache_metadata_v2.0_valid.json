@@ -1,0 +1,13 @@
+{
+    "version": "2.0",
+    "files": {
+        "cards/task1.md": {
+            "hash": "b1c2d3e4f5a6789012345678901234567890123456789012345678901234567890",
+            "last_checked_ts": 1709251400,
+            "token_count": 320,
+            "anchors": [
+                "Task Details"
+            ]
+        }
+    }
+}

@@ -1,0 +1,155 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://cuedeck.dev/schemas/cache-metadata.json",
+    "title": "CueDeck Cache Metadata Schema",
+    "description": "Schema for .cuedeck/.cache/metadata.json file",
+    "type": "object",
+    "properties": {
+        "version": {
+            "type": "string",
+            "description": "Cache schema version",
+            "pattern": "^\\d+\\.\\d+$",
+            "examples": [
+                "2.0",
+                "2.1",
+                "2.2"
+            ]
+        },
+        "created_at": {
+            "type": "integer",
+            "description": "Unix timestamp when cache was created",
+            "minimum": 0
+        },
+        "last_updated": {
+            "type": "integer",
+            "description": "Unix timestamp of last cache update",
+            "minimum": 0
+        },
+        "files": {
+            "type": "object",
+            "description": "Map of file paths to their metadata",
+            "patternProperties": {
+                "^.+\\.(md|rs)$": {
+                    "type": "object",
+                    "properties": {
+                        "hash": {
+                            "type": "string",
+                            "description": "SHA-256 hash of file content (hex, 64 chars)",
+                            "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "last_checked_ts": {
+                            "type": "integer",
+                            "description": "Unix timestamp of last validation",
+                            "minimum": 0
+                        },
+                        "token_count": {
+                            "type": "integer",
+                            "description": "Number of tokens in file",
+                            "minimum": 0
+                        },
+                        "anchors": {
+                            "type": "array",
+                            "description": "List of markdown headers/anchors",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "dependencies": {
+                            "type": "array",
+                            "description": "Files referenced by this file (v2.1+)",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "required": [
+                        "hash",
+                        "last_checked_ts",
+                        "token_count",
+                        "anchors"
+                    ],
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false
+        }
+    },
+    "required": [
+        "version",
+        "files"
+    ],
+    "additionalProperties": false,
+    "examples": [
+        {
+            "version": "2.1",
+            "created_at": 1709251200,
+            "last_updated": 1709337600,
+            "files": {
+                "docs/api.md": {
+                    "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                    "last_checked_ts": 1709251200,
+                    "token_count": 1420,
+                    "anchors": [
+                        "Authentication",
+                        "Authentication > Rate Limiting"
+                    ],
+                    "dependencies": [
+                        "docs/auth.md",
+                        "crates/cue_core/src/auth.rs"
+                    ]
+                }
+            }
+        }
+    ],
+    "allOf": [
+        {
+            "if": {
+                "properties": {
+                    "version": {
+                        "const": "2.0"
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "files": {
+                        "patternProperties": {
+                            "^.+\\.md$": {
+                                "not": {
+                                    "required": [
+                                        "dependencies"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "version": {
+                        "enum": [
+                            "2.1",
+                            "2.2"
+                        ]
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "files": {
+                        "patternProperties": {
+                            "^.+\\.md$": {
+                                "required": [
+                                    "dependencies"
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

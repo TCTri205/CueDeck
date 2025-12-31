@@ -13,6 +13,16 @@ CueDeck operates as a **local-first** tool, but it interfaces with external LLMs
 | **MCP Stdout** | Secrets in JSON response. | Secret Masking applied to ALL outputs. |
 | **Log Files** | Secrets in debug logs. | Logs on `stderr` are filtered (Level: INFO+). |
 
+### Security Compliance Matrix
+
+| Requirement | Implementation | Status |
+| :--- | :--- | :--- |
+| **Zero Trust** | Filesystem is read-only for Agent (except specific commands) | ✅ Enforced |
+| **Least Privilege** | MCP tools scoped to Workspace root | ✅ Enforced |
+| **Data Residency** | All processing is local-first (Localhost) | ✅ Enforced |
+| **Auditability** | All changes tracked in Git history | ✅ Enforced |
+| **Secret Scanning** | Pre-commit hooks + Runtime output filters | ✅ Enforced |
+
 ## 2. The Secret Guard
 
 The final filter before any content leaves the system.
@@ -42,7 +52,26 @@ secret_patterns = [
 ]
 ```
 
-### Verification (Unit Tests)
+> **[!NOTE]**
+> For the complete, machine-readable security pattern definitions (including test cases and severity levels), see [security-patterns.schema.json](../04_tools_and_data/schemas/security-patterns.schema.json).
+
+### Extended Patterns (v2.1+)
+
+Additional patterns available via schema configuration:
+
+| Pattern ID | Category | Regex | Severity |
+| :--- | :--- | :--- | :--- |
+| `mongodb-connection` | Database | `mongodb(\+srv)?://[^@]*:[^@]*@` | CRITICAL |
+| `rsa-private-key` | Private Keys | `-----BEGIN (RSA\|ECDSA) PRIVATE KEY-----` | CRITICAL |
+| `jwt-token` | JWT | `eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{40,}` | HIGH |
+| `eval-javascript` | Unsafe Code | `eval\s*\(` | CRITICAL |
+
+**Schema Integration**:
+
+```bash
+# Validate custom security patterns
+ajv validate -s docs/04_tools_and_data/schemas/security-patterns.schema.json -d .cuedeck/security-config.json
+```
 
 **File**: `crates/cue_core/src/security.rs`
 
@@ -60,6 +89,21 @@ fn test_ignores_short_keys() {
     let output = mask_secrets(input);
     assert_eq!(output, input); // Unchanged
 }
+```
+
+### Security Guard Flow
+
+```mermaid
+flowchart TD
+    A[Output Buffer] --> B{Contains Secret?}
+    B -->|Yes| C[Apply Regex Mask]
+    C --> B
+    B -->|No| D[Final Output]
+    
+    subgraph "Rules Engine"
+    E[Load Patterns] --> F[Compile Regex]
+    F --> B
+    end
 ```
 
 ## 3. Sandbox Rules

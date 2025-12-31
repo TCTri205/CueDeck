@@ -15,20 +15,55 @@ cuedeck-workspace/
 │   └── cue_cli/            # User Interface (CLI/TUI).
 ```
 
+### C4 Component Diagram
+
+```mermaid
+graph TB
+    subgraph "CueDeck System"
+        CLI[CLI Interface<br/>cue_cli]
+        MCP[MCP Server<br/>cue_mcp]
+        Core[Core Engine<br/>cue_core]
+        Config[Config Manager<br/>cue_config]
+        Common[Common Types<br/>cue_common]
+    end
+    
+    subgraph "External"
+        User[User / Developer]
+        AIAgent[AI Agent<br/>Claude/GPT]
+        FS[File System<br/>.cuedeck/]
+    end
+    
+    User -->|CLI commands| CLI
+    AIAgent -->|JSON-RPC| MCP
+    
+    CLI --> Core
+    MCP --> Core
+    
+    Core --> Config
+    Core --> Common
+    Core <-->|cache metadata| FS
+    
+    CLI -->|fuzzy search| User
+    MCP -->|SCENE.md| AIAgent
+    
+    style Core fill:#f96,stroke:#333,stroke-width:2px
+    style Common fill:#9cf,stroke:#333
+
 ## 2. Data Flow
 
 ### Inputs
 
-- **User**: CLI Commands (`cue open`, `cue scene`) or TUI interactions.
-- **AI Agent**: MCP Protocol requests via Stdio.
+- **User**: CLI Commands (`cue open`, `cue scene`, `cue upgrade`) or TUI interactions.
+- **AI Agent**: MCP Protocol requests (`read_context`, `list_tasks`) via Stdio.
 - **File Watcher**: Real-time file system events.
 
 ### Processing Core (Rust)
 
 1. **Incremental Parser**: Checks SHA256 of files. Re-parses only on change.
-2. **Dependency Resolver**: Builds a Directed Acyclic Graph (DAG) to handle `@ref` includes. Detects cycles.
-3. **Context Pruning**: Trims content to fit within the configured Token Budget using `tiktoken`.
-4. **Security Guard**: Scans for and redacts regex-matched secrets (API keys, env vars).
+2. **Dependency Resolver**: Builds a Directed Acyclic Graph (DAG) using `dependencies` from `metadata.json`. Detects cycles.
+3. **Context Search**: Fuzzy filename and content scoring for workspace traversal.
+4. **Context Pruning**: Trims content to fit within the configured Token Budget using `tiktoken`.
+5. **Security Guard**: Scans for and redacts regex-matched secrets (API keys, env vars).
 
 ### Storage
 
@@ -38,7 +73,40 @@ cuedeck-workspace/
 ### Outputs
 
 - **Passive**: `.cuedeck/SCENE.md` (and System Clipboard).
-- **Active**: JSON-RPC responses to MCP Clients.
+- **Active**: JSON-RPC responses to MCP Clients (Context, Documents, Tasks).
+
+### Data Flow Diagram
+
+```mermaid
+flowchart LR
+    A[User / AI] -->|Command/Request| B[cue CLI/MCP]
+    B --> C{Parse<br/>Intent}
+    C -->|scene| D[Scene Generator]
+    C -->|open| E[Fuzzy Finder]
+    C -->|read_context| F[Context Search]
+    
+    D --> G[File Index]
+    F --> G
+    
+    G -->|list files| H[Cache Manager]
+    H -->|check SHA| I{Changed?}
+    I -->|Yes| J[Re-parse MD]
+    I -->|No| K[Use Cached]
+    
+    J --> L[Build DAG]
+    K --> L
+    
+    L --> M{Cycle?}
+    M -->|Yes| N[Error 1002]
+    M -->|No| O[Topological Sort]
+    
+    O --> P[Token Pruning]
+    P --> Q[Secret Masking]
+    Q --> R[SCENE.md / Response]
+    
+    R --> A
+    N --> A
+```
 
 ## 3. Core Logic Details
 

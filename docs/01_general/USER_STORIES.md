@@ -31,3 +31,9 @@
 - **As a User**, I want to define a global config (`~/.config/cuedeck/config.toml`) for my "Author Name" but override it with a local project config (`.cuedeck/config.toml`) for "Token Limits".
 - **As an Ops**, I want the system to automatically mask patterns like `sk-[a-zA-Z0-9]{48}` in all outputs so API keys are never leaked to an external LLM.
 - **As a Dev**, I want to use `cue card new "Fix Login Bug"` and have it auto-generate a short, unique Hash ID (e.g., `2a9f1x`) to prevent file naming collisions in a team environment.
+
+### 5. System Maintenance
+
+- **As a User**, I want to run `cue upgrade` to automatically update CueDeck to the latest version without manually downloading binaries.
+- **As a Dev**, I want to run `cue clean` to force a fresh cache rebuild when experiencing stale or corrupted context content.
+- **As an AI Agent**, I want the MCP Server to start via `cue mcp` and communicate over `stdio`, ensuring all logs go to `stderr` so JSON-RPC responses are not corrupted.

@@ -1,0 +1,9 @@
+{
+    "jsonrpc": "2.0",
+    "method": "read_context",
+    "id": 1,
+    "params": {
+        "query": "authentication flow",
+        "limit": 5
+    }
+}

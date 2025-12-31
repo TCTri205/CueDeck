@@ -1,0 +1,30 @@
+name: Metrics Collection
+
+on:
+  schedule:
+    # Run every Sunday at midnight UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  benchmarks:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      
+      - name: Install criterion
+        run: cargo install cargo-criterion || true
+      
+      - name: Run benchmarks
+        run: |
+          mkdir -p benchmarks
+          echo "Benchmark placeholder - implement when benchmark crate is added"
+          
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.run_number }}
+          path: target/criterion
+          retention-days: 90

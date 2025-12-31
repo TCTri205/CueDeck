@@ -1,0 +1,82 @@
+[workspace]
+members = [
+    "crates/cue_common",
+    "crates/cue_config",
+    "crates/cue_core",
+    "crates/cue_mcp",
+    "crates/cue_cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["CueDeck Team <team@cuedeck.dev>"]
+license = "MIT"
+repository = "https://github.com/cuedeck/cuedeck"
+
+[workspace.dependencies]
+# Shared dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9.33"
+tokio = { version = "1.35", features = ["full"] }
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+toml = "0.8"
+
+# CLI & Args
+clap = { version = "4.5", features = ["derive", "string"] }
+
+# Error handling with diagnostics
+# (miette removed)
+
+# Markdown parsing
+# (pulldown-cmark, gray_matter removed)
+
+# HTTP Client & Versioning
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+semver = "1.0"
+
+# Token counting
+# (tiktoken-rs removed)
+
+# File system
+walkdir = "2.5"
+notify = "6.1"
+
+# Hashing
+sha2 = "0.10"
+
+# Config management
+# (config removed)
+
+# UI
+arboard = "3.6"
+
+# Graph algorithms
+# (petgraph removed)
+
+# Regex for secret masking
+regex = "1.10"
+
+# Parallel processing
+# (rayon removed)
+
+# Date/time handling
+chrono = "0.4"
+
+# Random number generation
+rand = "0.8"
+
+# Testing utilities
+assert_cmd = "2.0"
+predicates = "3.0"
+assert_fs = "1.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

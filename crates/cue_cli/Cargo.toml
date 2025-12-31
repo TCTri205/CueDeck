@@ -1,0 +1,34 @@
+[package]
+name = "cue_cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "cue"
+path = "src/main.rs"
+
+[dependencies]
+cue_common = { path = "../cue_common" }
+cue_core = { path = "../cue_core" }
+cue_mcp = { path = "../cue_mcp" }
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+clap.workspace = true
+arboard.workspace = true
+notify.workspace = true
+chrono = "0.4"
+rand = "0.8"
+toml.workspace = true
+walkdir.workspace = true
+reqwest.workspace = true
+semver.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true
+assert_fs.workspace = true

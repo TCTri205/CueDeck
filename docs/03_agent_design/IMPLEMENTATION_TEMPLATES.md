@@ -74,6 +74,7 @@ Cargo.lock
 # CueDeck Runtime
 .cuedeck/.cache/
 .cuedeck/logs/
+.cuedeck/SCENE.md
 
 # IDE
 .idea/
@@ -148,6 +149,94 @@ miette.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
+```
+
+---
+
+---
+
+## 5. CLI Entry Point (`crates/cue_cli/src/main.rs`)
+
+```rust
+use clap::Parser;
+use miette::{IntoDiagnostic, Result};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+mod commands;
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(clap::Subcommand)]
+enum Commands {
+    Init,
+    Doctor,
+    Watch,
+    Scene {
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Initialize logging
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::new(
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
+        ))
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stderr))
+        .init();
+
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::Init => {
+            println!("Initializing workspace...");
+            // cue_core::init::run()?;
+        }
+        Commands::Doctor => {
+            println!("Running health checks...");
+            // cue_core::doctor::run()?;
+        }
+        _ => {
+            println!("Command not yet implemented!");
+        }
+    }
+
+    Ok(())
+}
+```
+
+---
+
+## 6. Core Lib Skeleton (`crates/cue_core/src/lib.rs`)
+
+```rust
+pub mod config;
+pub mod dag;
+pub mod parser;
+pub mod session;
+
+use miette::Diagnostic;
+use thiserror::Error;
+
+#[derive(Error, Debug, Diagnostic)]
+pub enum CueError {
+    #[error("Feature not implemented")]
+    #[diagnostic(code(cuedeck::core::todo))]
+    NotImplemented,
+}
+
+pub type Result<T> = std::result::Result<T, CueError>;
+
+pub fn version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
 ```
 
 ---

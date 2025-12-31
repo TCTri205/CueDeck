@@ -32,12 +32,25 @@ We reject the use of opaque Vector Databases for project management.
 
 ## 3. Retrieval Strategy: "Anchor-Walking"
 
-Instead of "Vector Similarity", we use **Deterministic Traversal**:
+1. **Result**: The Agent loads *exactly* those 3 nodes. No noise.
 
-1. **Entry Point**: User activates Card `2a9f1x` ("Fix Login").
-2. **Explicit Link**: Card refs `docs/auth.md#LoginFlow`.
-3. **Implicit Link**: `docs/auth.md` refs `crates/cue_core/src/auth.rs`.
-4. **Result**: The Agent loads *exactly* those 3 nodes. No noise.
+### Anchor-Walking Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant Core as Engine
+    participant Graph as Dependency Graph
+    
+    Agent->>Core: Activate Card(2a9f1x)
+    Core->>Graph: Get Neighbors(2a9f1x, Depth=2)
+    Graph->>Graph: 1. Card 2a9f1x (Root)
+    Graph->>Graph: 2. Follow refs -> docs/auth.md
+    Graph->>Graph: 3. Follow refs -> docs/security.md
+    Graph-->>Core: List<Node> [Card, AuthDoc, SecDoc]
+    Core->>Core: Prune to Budget
+    Core-->>Agent: Optimized Context
+```
 
 ### Concrete Example: Graph Walk
 
@@ -60,12 +73,18 @@ graph LR
 3. `crates/cue_core/src/auth.rs` (Depth 2)
 4. `docs/security.md#TokenValidation` (Depth 2)
 
-### Pruning Logic
-
-If the total exceeds the token budget:
-
 - **Keep**: Root (Card) + Depth 1.
 - **Prune**: Depth 2+ (with "Truncated" warning).
+
+### Efficiency Comparison
+
+| Feature | Vector DB (RAG) | Anchor-Walking (CueDeck) |
+| :--- | :--- | :--- |
+| **Precision** | Probabilistic (0.7-0.9) | Deterministic (1.0) |
+| **Noise** | Hallucinations likely | Zero noise |
+| **Latency** | 200ms - 2s (Embedding + NN) | < 5ms (Graph Traversal) |
+| **Storage** | Heavy Index files | Zero (uses source files) |
+| **Updatability** | Requires re-indexing | Instant (on file save) |
 
 ## 4. Session Persistence (Extended)
 
@@ -149,6 +168,7 @@ When context is tight, inject decisions:
 ### Assumption Validation
 
 Track assumptions:
+
 - "Project uses React" → Validate on new session
 - "Database is PostgreSQL" → Check against config
 - "API uses REST" → Confirm in architecture.md

@@ -1,0 +1,16 @@
+[package]
+name = "cue_mcp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+cue_common = { path = "../cue_common" }
+cue_core = { path = "../cue_core" }
+cue_config = { path = "../cue_config" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+once_cell = "1.19"
