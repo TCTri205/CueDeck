@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v0.2.0)'
+        required: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            archive: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive: tar.gz
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Extract version from tag or manual input
+      - name: Set Version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      
+      - name: Build Release Binary
+        run: cargo build --release --bin cue --target ${{ matrix.target }}
+      
+      # FIXED: Asset naming to match self_update format: cue-{version}-{target}.{ext}
+      - name: Package (Unix)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf cue-${{ steps.version.outputs.version }}-${{ matrix.target }}.tar.gz cue
+          mv cue-${{ steps.version.outputs.version }}-${{ matrix.target }}.tar.gz ${{ github.workspace }}/
+      
+      - name: Package (Windows)
+        if: matrix.archive == 'zip'
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a cue-${{ steps.version.outputs.version }}-${{ matrix.target }}.zip cue.exe
+          move cue-${{ steps.version.outputs.version }}-${{ matrix.target }}.zip ${{ github.workspace }}/
+      
+      # FIXED: Separate checksum steps for Unix and Windows
+      - name: Generate Checksum (Unix)
+        if: matrix.archive == 'tar.gz'
+        run: sha256sum cue-${{ steps.version.outputs.version }}-${{ matrix.target }}.tar.gz > cue-${{ steps.version.outputs.version }}-${{ matrix.target }}.tar.gz.sha256
+      
+      - name: Generate Checksum (Windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $file = "cue-${{ steps.version.outputs.version }}-${{ matrix.target }}.zip"
+          $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+          "$hash  $file" | Out-File -Encoding ascii "$file.sha256"
+      
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cue-${{ matrix.target }}
+          path: |
+            cue-${{ steps.version.outputs.version }}-${{ matrix.target }}.*
+  
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      # NEW: Validate assets before release
+      - name: Verify Assets
+        run: |
+          echo "Checking uploaded artifacts..."
+          for dir in artifacts/cue-*; do
+            echo "Contents of $dir:"
+            ls -lh "$dir"
+          done
+          
+          # Verify each platform has both archive and checksum
+          for target in x86_64-pc-windows-msvc x86_64-unknown-linux-gnu x86_64-apple-darwin aarch64-apple-darwin; do
+            count=$(find artifacts -name "*$target*" | wc -l)
+            if [ "$count" -lt 2 ]; then
+              echo "ERROR: Missing files for $target"
+              exit 1
+            fi
+          done
+          echo "✓ All assets verified"
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

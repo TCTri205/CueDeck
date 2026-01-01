@@ -20,10 +20,15 @@ jobs:
 
   test:
     name: Test Suite
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Cache Dependencies
+        uses: Swatinem/rust-cache@v2
       - run: cargo test --all-features --workspace
 
   fmt:
@@ -61,6 +66,17 @@ jobs:
         with:
           files: lcov.info
           fail_ci_if_error: false
+
+  benchmark:
+    name: Performance Benchmark
+    runs-on: ubuntu-latest
+    # Only run benchmarks on PRs to detect regressions
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run Benchmark
+        run: cargo test --package cue_core --test benchmark -- --ignored --nocapture
 
   release:
     name: Release Build

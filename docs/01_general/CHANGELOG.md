@@ -2,6 +2,37 @@
 
 All notable changes to CueDeck will be documented in this file.
 
+## [2.4.0] - 2026-01-01
+
+### Added
+
+- **CueEngine**: Stateful architecture for incremental updates (43x faster hot init)
+- **Self-Updater**: `cue upgrade` command with automatic binary updates from GitHub
+- **Progress Indicators**: Spinners for `cue scene` and `cue watch` operations
+- **Parallel Processing**: Parallelized file parsing and semantic search with `rayon`
+- **Document Cache**: SHA256-based caching with persistence and auto-repair
+- **CI/CD Pipeline**: Automated multi-platform builds via GitHub Actions
+
+### Performance
+
+- Hot initialization: 1.55s → 35ms (43x speedup)
+- Scene rendering: <20ms from memory
+- Watch mode: Incremental updates only re-parse changed files
+- Binary size: Reduced ~35% via strip optimization
+
+### Changed
+
+- `cue watch` now maintains state in memory for faster updates
+- `generate_scene` refactored to use `CueEngine` internally
+- Release builds optimized with LTO and strip
+
+### Technical
+
+- Added dependencies: `rayon`, `bincode`, `schemars`, `self_update`, `indicatif`
+- Enhanced `DependencyGraph` with incremental update methods
+- Implemented read-only cache access for rendering
+- CI/CD: GitHub Actions with multi-platform release automation
+
 ## [2.3.0] - 2025-12-31
 
 ### Added
