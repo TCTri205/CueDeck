@@ -12,35 +12,35 @@ pub struct Config {
     /// Project root path (set programmatically, not in TOML)
     #[serde(skip)]
     pub root: PathBuf,
-    
+
     /// Core settings
     #[serde(default)]
     pub core: CoreConfig,
-    
+
     /// Parser settings
     #[serde(default)]
     pub parser: ParserConfig,
-    
+
     /// Security settings
     #[serde(default)]
     pub security: SecurityConfig,
-    
+
     /// MCP settings
     #[serde(default)]
     pub mcp: McpConfig,
-    
+
     /// Author settings
     #[serde(default)]
     pub author: AuthorConfig,
-    
+
     /// Watcher settings
     #[serde(default)]
     pub watcher: WatcherConfig,
-    
+
     /// Cache settings
     #[serde(default)]
     pub cache: CacheConfig,
-    
+
     // Keep old budgets field for backward compatibility
     #[serde(default, skip_serializing)]
     pub budgets: TokenBudgets,
@@ -51,13 +51,17 @@ pub struct Config {
 pub struct CoreConfig {
     #[serde(default = "default_token_limit")]
     pub token_limit: usize,
-    
+
     #[serde(default = "default_hash_algo")]
     pub hash_algo: String,
 }
 
-fn default_token_limit() -> usize { 32_000 }
-fn default_hash_algo() -> String { "sha256".to_string() }
+fn default_token_limit() -> usize {
+    32_000
+}
+fn default_hash_algo() -> String {
+    "sha256".to_string()
+}
 
 impl Default for CoreConfig {
     fn default() -> Self {
@@ -73,13 +77,17 @@ impl Default for CoreConfig {
 pub struct ParserConfig {
     #[serde(default = "default_ignore_patterns")]
     pub ignore_patterns: Vec<String>,
-    
+
     #[serde(default = "default_anchor_levels")]
     pub anchor_levels: Vec<u8>,
 }
 
 fn default_ignore_patterns() -> Vec<String> {
-    vec!["target/".to_string(), "node_modules/".to_string(), ".git/".to_string()]
+    vec![
+        "target/".to_string(),
+        "node_modules/".to_string(),
+        ".git/".to_string(),
+    ]
 }
 
 fn default_anchor_levels() -> Vec<u8> {
@@ -100,7 +108,7 @@ impl Default for ParserConfig {
 pub struct SecurityConfig {
     #[serde(default = "default_secret_patterns")]
     pub secret_patterns: Vec<String>,
-    
+
     #[serde(default)]
     pub extra_patterns: Vec<String>,
 }
@@ -125,7 +133,9 @@ pub struct McpConfig {
     pub search_limit: usize,
 }
 
-fn default_search_limit() -> usize { 10 }
+fn default_search_limit() -> usize {
+    10
+}
 
 impl Default for McpConfig {
     fn default() -> Self {
@@ -140,7 +150,7 @@ impl Default for McpConfig {
 pub struct AuthorConfig {
     #[serde(default)]
     pub name: String,
-    
+
     #[serde(default)]
     pub email: String,
 }
@@ -150,15 +160,17 @@ pub struct AuthorConfig {
 pub struct WatcherConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
-    
+
     #[serde(default = "default_debounce_ms")]
     pub debounce_ms: u64,
-    
+
     #[serde(default = "default_watcher_ignore")]
     pub ignore_patterns: Vec<String>,
 }
 
-fn default_debounce_ms() -> u64 { 500 }
+fn default_debounce_ms() -> u64 {
+    500
+}
 fn default_watcher_ignore() -> Vec<String> {
     vec![".git/".to_string(), ".cache/".to_string()]
 }
@@ -178,18 +190,24 @@ impl Default for WatcherConfig {
 pub struct CacheConfig {
     #[serde(default = "default_cache_mode")]
     pub cache_mode: String,
-    
+
     #[serde(default = "default_memory_limit")]
     pub memory_limit_mb: usize,
-    
+
     /// Legacy enabled field for backward compat
     #[serde(default = "default_true")]
     pub enabled: bool,
 }
 
-fn default_cache_mode() -> String { "lazy".to_string() }
-fn default_memory_limit() -> usize { 512 }
-fn default_true() -> bool { true }
+fn default_cache_mode() -> String {
+    "lazy".to_string()
+}
+fn default_memory_limit() -> usize {
+    512
+}
+fn default_true() -> bool {
+    true
+}
 
 impl Default for CacheConfig {
     fn default() -> Self {
@@ -206,17 +224,23 @@ impl Default for CacheConfig {
 pub struct TokenBudgets {
     #[serde(default = "default_feature_budget")]
     pub feature: usize,
-    
+
     #[serde(default = "default_bugfix_budget")]
     pub bugfix: usize,
-    
+
     #[serde(default = "default_refactor_budget")]
     pub refactor: usize,
 }
 
-fn default_feature_budget() -> usize { 6000 }
-fn default_bugfix_budget() -> usize { 4000 }
-fn default_refactor_budget() -> usize { 5000 }
+fn default_feature_budget() -> usize {
+    6000
+}
+fn default_bugfix_budget() -> usize {
+    4000
+}
+fn default_refactor_budget() -> usize {
+    5000
+}
 
 impl Default for TokenBudgets {
     fn default() -> Self {
@@ -232,7 +256,7 @@ impl Config {
     /// Load configuration from workspace root
     pub fn load(workspace_root: &Path) -> Result<Self> {
         let config_path = workspace_root.join(".cuedeck/config.toml");
-        
+
         if !config_path.exists() {
             // Return default config
             return Ok(Self {
@@ -247,13 +271,13 @@ impl Config {
                 budgets: TokenBudgets::default(),
             });
         }
-        
+
         let content = std::fs::read_to_string(&config_path)
             .map_err(|e| CueError::ConfigError(format!("Failed to read config: {}", e)))?;
-        
+
         let mut config: Config = toml::from_str(&content)
             .map_err(|e| CueError::ConfigError(format!("Failed to parse config: {}", e)))?;
-        
+
         config.root = workspace_root.to_path_buf();
         Ok(config)
     }

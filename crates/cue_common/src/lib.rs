@@ -2,8 +2,8 @@
 //!
 //! This crate provides shared data structures used across all CueDeck components.
 
-pub mod telemetry;
 pub mod sanitizer;
+pub mod telemetry;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -37,7 +37,11 @@ pub enum CueError {
     Locked { pid: u32 },
 
     #[error("Rate limit exceeded: {current}/{limit} in {window}s")]
-    RateLimit { current: usize, limit: usize, window: u64 },
+    RateLimit {
+        current: usize,
+        limit: usize,
+        window: u64,
+    },
 
     #[error("Invalid input: {0}")]
     ValidationError(String),
@@ -54,45 +58,49 @@ pub enum CueError {
 pub struct CardMetadata {
     /// Title of the card/document
     pub title: String,
-    
+
     /// Status of the task (todo, active, done, archived)
     #[serde(default = "default_status")]
     pub status: String,
-    
+
     /// Assignee (GitHub username or similar)
     #[serde(default)]
     pub assignee: Option<String>,
-    
+
     /// Priority (low, medium, high, critical)
     #[serde(default = "default_priority")]
     pub priority: String,
-    
+
     /// Creation timestamp (ISO 8601)
     #[serde(default)]
     pub created: Option<String>,
 }
 
-fn default_status() -> String { "todo".to_string() }
-fn default_priority() -> String { "medium".to_string() }
+fn default_status() -> String {
+    "todo".to_string()
+}
+fn default_priority() -> String {
+    "medium".to_string()
+}
 
 /// Represents a markdown document with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     /// Path to the document (workspace-relative or absolute)
     pub path: PathBuf,
-    
+
     /// Parsed YAML frontmatter (typed)
     pub frontmatter: Option<CardMetadata>,
-    
+
     /// SHA256 hash of content
     pub hash: String,
-    
+
     /// Estimated token count
     pub tokens: usize,
-    
+
     /// Parsed anchors (headings)
     pub anchors: Vec<Anchor>,
-    
+
     /// Outgoing links (dependencies) detected in the file
     #[serde(default)]
     pub links: Vec<String>,
@@ -103,16 +111,16 @@ pub struct Document {
 pub struct Anchor {
     /// URL-safe slug (e.g., "login-flow")
     pub slug: String,
-    
+
     /// Original header text
     pub header: String,
-    
+
     /// Heading level (1-6)
     pub level: u8,
-    
+
     /// Start line number (1-indexed)
     pub start_line: usize,
-    
+
     /// End line number (inclusive, 1-indexed)
     pub end_line: usize,
 }

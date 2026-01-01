@@ -9,23 +9,35 @@ pub struct LogSanitizer {
 
 impl LogSanitizer {
     pub fn new() -> Self {
-        let patterns = PATTERNS.get_or_init(|| vec![
-            (Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap(), 
-             "***@***.***".to_string()),
-            // Windows/Unix path redaction: matches /home/... or C:\Users\... up to next slash/backslash
-            (Regex::new(r"(/home/|C:\\Users\\)[^/\\s]+").unwrap(), 
-             "$1***".to_string()),
-            (Regex::new(r"(sk|pk)-[a-zA-Z0-9]{20,}").unwrap(), 
-             "$1-***".to_string()),
-             // IPv4 Address
-            (Regex::new(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b").unwrap(), 
-             "***.***.***.***".to_string()),
-        ]);
-        
+        let patterns = PATTERNS.get_or_init(|| {
+            vec![
+                (
+                    Regex::new(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}").unwrap(),
+                    "***@***.***".to_string(),
+                ),
+                // Windows/Unix path redaction: matches /home/... or C:\Users\... up to next slash/backslash
+                (
+                    Regex::new(r"(/home/|C:\\Users\\)[^/\\s]+").unwrap(),
+                    "$1***".to_string(),
+                ),
+                (
+                    Regex::new(r"(sk|pk)-[a-zA-Z0-9]{20,}").unwrap(),
+                    "$1-***".to_string(),
+                ),
+                // IPv4 Address
+                (
+                    Regex::new(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b").unwrap(),
+                    "***.***.***.***".to_string(),
+                ),
+            ]
+        });
+
         // Clone the Vec (Regex is wrapped in Arc, so checks clone is cheapRef)
-        Self { patterns: patterns.clone() }
+        Self {
+            patterns: patterns.clone(),
+        }
     }
-    
+
     pub fn sanitize(&self, message: &str) -> String {
         let mut result = message.to_string();
         for (pattern, replacement) in &self.patterns {
@@ -78,11 +90,11 @@ mod tests {
         let log = "Key: sk-12345678901234567890abcdef";
         assert_eq!(sanitizer.sanitize(log), "Key: sk-***");
     }
-    
+
     #[test]
     fn test_ip_redaction() {
-         let sanitizer = LogSanitizer::new();
-         let log = "Connection from 192.168.1.1";
-         assert_eq!(sanitizer.sanitize(log), "Connection from ***.***.***.***");
+        let sanitizer = LogSanitizer::new();
+        let log = "Connection from 192.168.1.1";
+        assert_eq!(sanitizer.sanitize(log), "Connection from ***.***.***.***");
     }
 }

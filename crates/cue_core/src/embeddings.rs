@@ -1,5 +1,5 @@
-use anyhow::{Result, Context};
-use fastembed::{InitOptions, TextEmbedding, EmbeddingModel as FastEmbedModel};
+use anyhow::{Context, Result};
+use fastembed::{EmbeddingModel as FastEmbedModel, InitOptions, TextEmbedding};
 use std::sync::OnceLock;
 
 static EMBEDDING_MODEL: OnceLock<TextEmbedding> = OnceLock::new();
@@ -12,12 +12,12 @@ impl EmbeddingModel {
     fn get_model() -> &'static TextEmbedding {
         EMBEDDING_MODEL.get_or_init(|| {
             tracing::info!("Initializing embedding model (all-MiniLM-L6-v2)...");
-            
+
             let model = TextEmbedding::try_new(
-                InitOptions::new(FastEmbedModel::AllMiniLML6V2)
-                    .with_show_download_progress(false)
-            ).expect("Failed to initialize embedding model"); // Handle error internally
-            
+                InitOptions::new(FastEmbedModel::AllMiniLML6V2).with_show_download_progress(false),
+            )
+            .expect("Failed to initialize embedding model"); // Handle error internally
+
             tracing::info!("Embedding model initialized successfully");
             model
         })
@@ -25,14 +25,15 @@ impl EmbeddingModel {
 
     /// Generate embeddings for a text string
     pub fn embed(text: &str) -> Result<Vec<f32>> {
-        let model = Self::get_model();  // No longer returns Result
-        
+        let model = Self::get_model(); // No longer returns Result
+
         let embeddings = model
             .embed(vec![text], None)
             .context("Failed to generate embeddings")?;
-        
+
         // Extract first (and only) embedding
-        embeddings.into_iter()
+        embeddings
+            .into_iter()
             .next()
             .ok_or_else(|| anyhow::anyhow!("No embeddings generated"))
     }
@@ -78,9 +79,12 @@ mod tests {
     fn test_embed_consistency() {
         let vec1 = EmbeddingModel::embed("rust programming").unwrap();
         let vec2 = EmbeddingModel::embed("rust programming").unwrap();
-        
+
         let similarity = EmbeddingModel::cosine_similarity(&vec1, &vec2);
-        assert!((similarity - 1.0).abs() < 0.001, "Same text should have similarity ~1.0");
+        assert!(
+            (similarity - 1.0).abs() < 0.001,
+            "Same text should have similarity ~1.0"
+        );
     }
 
     #[test]
@@ -105,8 +109,13 @@ mod tests {
         let sim_related = EmbeddingModel::cosine_similarity(&vec_async, &vec_concurrent);
         let sim_unrelated = EmbeddingModel::cosine_similarity(&vec_async, &vec_unrelated);
 
-        assert!(sim_related > sim_unrelated, 
-            "Related concepts should have higher similarity than unrelated ones");
-        assert!(sim_related > 0.5, "Related concepts should have similarity > 0.5");
+        assert!(
+            sim_related > sim_unrelated,
+            "Related concepts should have higher similarity than unrelated ones"
+        );
+        assert!(
+            sim_related > 0.5,
+            "Related concepts should have similarity > 0.5"
+        );
     }
 }

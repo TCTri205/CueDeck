@@ -17,22 +17,22 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 /// tracing::info!("Application started");
 /// ```
 pub fn init_tracing(verbose: bool, json_format: bool) {
-    let filter_level = if verbose { 
-        "debug,hyper=info,tokio=info" 
-    } else { 
-        "info" 
+    let filter_level = if verbose {
+        "debug,hyper=info,tokio=info"
+    } else {
+        "info"
     };
-    
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(filter_level));
-    
+
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(filter_level));
+
     if json_format {
         // JSON format for machine-parseable logs
         tracing_subscriber::registry()
             .with(
                 tracing_subscriber::fmt::layer()
                     .json()
-                    .with_writer(std::io::stderr) // CRITICAL: Never write to stdout
+                    .with_writer(std::io::stderr), // CRITICAL: Never write to stdout
             )
             .with(env_filter)
             .init();
@@ -43,7 +43,7 @@ pub fn init_tracing(verbose: bool, json_format: bool) {
                 tracing_subscriber::fmt::layer()
                     .with_writer(std::io::stderr) // CRITICAL: Never write to stdout
                     .with_target(false)
-                    .compact()
+                    .compact(),
             )
             .with(env_filter)
             .init();
