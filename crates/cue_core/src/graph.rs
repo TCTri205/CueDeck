@@ -8,14 +8,17 @@
 use cue_common::{Document, Result, CueError};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::{is_cyclic_directed, toposort};
+use petgraph::visit::EdgeRef;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Dependency graph built from document links
 pub struct DependencyGraph {
     pub(crate) graph: DiGraph<PathBuf, ()>,
-    #[allow(dead_code)]
     path_to_node: HashMap<PathBuf, NodeIndex>,
+    // Reverse index for efficient lookups
+    slug_map: HashMap<String, PathBuf>,
+    file_map: HashMap<String, PathBuf>,
 }
 
 impl DependencyGraph {
@@ -91,7 +94,88 @@ impl DependencyGraph {
             }
         }
         
-        Ok(DependencyGraph { graph, path_to_node })
+        Ok(DependencyGraph { 
+            graph, 
+            path_to_node,
+            slug_map,
+            file_map,
+        })
+    }
+    
+    /// Add or update a single document in the graph
+    /// 
+    /// This is optimized for incremental updates (watch mode).
+    /// Removes old edges from this document and recreates them based on current links.
+    #[tracing::instrument(skip(self, doc), fields(path = ?doc.path))]
+    pub fn add_or_update_document(&mut self, doc: &Document) {
+        tracing::debug!("Updating document in graph: {:?}", doc.path);
+        
+        // Get or create node for this document
+        let node = *self.path_to_node.entry(doc.path.clone())
+            .or_insert_with(|| self.graph.add_node(doc.path.clone()));
+        
+        // Update index maps
+        if let Some(name) = doc.path.file_name().and_then(|n| n.to_str()) {
+            self.file_map.insert(name.to_lowercase(), doc.path.clone());
+            if let Some(stem) = doc.path.file_stem().and_then(|s| s.to_str()) {
+                self.file_map.insert(stem.to_lowercase(), doc.path.clone());
+            }
+        }
+        if let Some(fm) = &doc.frontmatter {
+            let slug = fm.title.to_lowercase().replace(' ', "-");
+            self.slug_map.insert(slug, doc.path.clone());
+        }
+        
+        // Remove all outgoing edges from this node
+        let edges_to_remove: Vec<_> = self.graph
+            .edges_directed(node, petgraph::Direction::Outgoing)
+            .map(|e| e.id())
+            .collect();
+        
+        for edge in edges_to_remove {
+            self.graph.remove_edge(edge);
+        }
+        
+        // Add new edges based on current links
+        for link in &doc.links {
+            let target_path = if link.starts_with("./") || link.starts_with("../") {
+                doc.path.parent()
+                    .and_then(|parent| parent.join(link).canonicalize().ok())
+            } else if link.contains('/') {
+                Some(PathBuf::from(link))
+            } else {
+                self.file_map.get(&link.to_lowercase()).cloned()
+                    .or_else(|| self.slug_map.get(&link.to_lowercase()).cloned())
+            };
+            
+            if let Some(target) = target_path {
+                if let Some(&to_node) = self.path_to_node.get(&target) {
+                    self.graph.add_edge(node, to_node, ());
+                }
+            }
+        }
+    }
+    
+    /// Remove a document from the graph
+    /// 
+    /// Optimized for incremental updates when files are deleted.
+    #[tracing::instrument(skip(self), fields(path = ?path))]
+    pub fn remove_document(&mut self, path: &PathBuf) {
+        tracing::debug!("Removing document from graph: {:?}", path);
+        
+        if let Some(node) = self.path_to_node.remove(path) {
+            self.graph.remove_node(node);
+            
+            // Clean up index maps
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                self.file_map.remove(&name.to_lowercase());
+                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    self.file_map.remove(&stem.to_lowercase());
+                }
+            }
+            // Note: slug_map cleanup would require re-reading doc frontmatter,
+            // so we skip it (stale entries are harmless)
+        }
     }
     
     /// Detect if the graph contains cycles

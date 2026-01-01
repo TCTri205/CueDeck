@@ -18,7 +18,7 @@ pub fn list_tasks(workspace_root: &Path, status_filter: Option<&str>, assignee_f
         .into_iter()
         .filter_map(|e| e.ok()) 
     {
-        if entry.file_type().is_file() && entry.path().extension().map_or(false, |e| e == "md") {
+        if entry.file_type().is_file() && entry.path().extension().is_some_and(|e| e == "md") {
             // Parse the file
             match parse_file(entry.path()) {
                 Ok(doc) => {

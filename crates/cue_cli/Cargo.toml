@@ -27,6 +27,10 @@ toml.workspace = true
 walkdir.workspace = true
 reqwest.workspace = true
 semver.workspace = true
+indicatif.workspace = true
+regex.workspace = true
+serde_yaml.workspace = true
+self_update.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true

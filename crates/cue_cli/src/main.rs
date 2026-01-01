@@ -257,12 +257,21 @@ memory_limit_mb = 512
 
 async fn cmd_scene(dry_run: bool, _token_limit: Option<usize>) -> anyhow::Result<()> {
     use std::time::Instant;
+    use indicatif::{ProgressBar, ProgressStyle};
     
     let start = Instant::now();
     let workspace_root = Path::new(".");
     
+    // Create spinner
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(ProgressStyle::default_spinner().template("{spinner:.green} {msg}")?);
+    pb.set_message("Indexing and generating scene...");
+    pb.enable_steady_tick(std::time::Duration::from_millis(80));
+    
     // Generate scene
     let scene = cue_core::generate_scene(workspace_root)?;
+    
+    pb.finish_and_clear();
     
     // Count tokens (rough estimate)
     let tokens = scene.len() / 4;
@@ -373,31 +382,44 @@ async fn cmd_doctor(_repair: bool, json: bool) -> anyhow::Result<()> {
     
     // Check 3: Parse all cards for YAML frontmatter
     let cards_dir = Path::new(".cuedeck/cards");
+    let mut frontmatter_errors = 0;
     if cards_dir.exists() {
-        for entry in walkdir::WalkDir::new(cards_dir) {
-            if let Ok(entry) = entry {
-                if entry.file_type().is_file() && entry.path().extension().map_or(false, |e| e == "md") {
-                    if let Ok(content) = fs::read_to_string(entry.path()) {
-                        if content.starts_with("---") {
-                            // TODO: Validate YAML frontmatter
+        for entry in walkdir::WalkDir::new(cards_dir).into_iter().flatten() {
+            if entry.file_type().is_file() && entry.path().extension().is_some_and(|e| e == "md") {
+                if let Ok(content) = fs::read_to_string(entry.path()) {
+                    if content.starts_with("---") {
+                        // Extract frontmatter section
+                        let frontmatter_regex = regex::Regex::new(r"(?ms)^---\r?\n(.*?)\r?\n---").unwrap();
+                        if let Some(captures) = frontmatter_regex.captures(&content) {
+                            let yaml_str = captures.get(1).unwrap().as_str();
+                            
+                            // Validate YAML syntax and structure
+                            match serde_yaml::from_str::<cue_common::CardMetadata>(yaml_str) {
+                                Ok(_) => {
+                                    // Valid frontmatter
+                                }
+                                Err(e) => {
+                                    issues.push(format!("Invalid frontmatter in {:?}: {}", entry.path(), e));
+                                    frontmatter_errors += 1;
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-        eprintln!("  [OK] Card frontmatter");
+        if frontmatter_errors == 0 {
+            eprintln!("  [OK] Card frontmatter");
+        }
     }
     
     // Check 4: Detect cycles using real graph logic
     let mut all_docs = Vec::new();
     if cards_dir.exists() {
-        for entry in walkdir::WalkDir::new(cards_dir) {
-            if let Ok(entry) = entry {
-                if entry.file_type().is_file() && entry.path().extension().map_or(false, |e| e == "md") {
-                    match cue_core::parse_file(entry.path()) {
-                        Ok(doc) => all_docs.push(doc),
-                        Err(_) => {} // Already warned in Check 3
-                    }
+        for entry in walkdir::WalkDir::new(cards_dir).into_iter().flatten() {
+            if entry.file_type().is_file() && entry.path().extension().is_some_and(|e| e == "md") {
+                if let Ok(doc) = cue_core::parse_file(entry.path()) {
+                    all_docs.push(doc);
                 }
             }
         }
@@ -560,7 +582,7 @@ async fn cmd_logs(action: LogAction) -> anyhow::Result<()> {
                     let entry = entry?;
                     let path = entry.path();
                     
-                    if path.is_file() && path.extension().map_or(false, |ext| ext == "log") {
+                    if path.is_file() && path.extension().is_some_and(|ext| ext == "log") {
                         let file_name = path.file_name().unwrap();
                         fs::rename(&path, archive_dir.join(file_name))?;
                     }
@@ -588,55 +610,69 @@ async fn cmd_logs(action: LogAction) -> anyhow::Result<()> {
 
 async fn cmd_upgrade() -> anyhow::Result<()> {
     use semver::Version;
+    use self_update::cargo_crate_version;
+    use indicatif::{ProgressBar, ProgressStyle};
+    use std::time::Duration;
     
     eprintln!("✓ Checking for updates...");
     
     let current_version = Version::parse(env!("CARGO_PKG_VERSION"))?;
     tracing::info!("Current version: {}", current_version);
 
-    let client = reqwest::Client::builder()
-        .user_agent("cue-cli")
-        .build()?;
+    // Create progress spinner
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(ProgressStyle::default_spinner().template("{spinner:.green} {msg}")?);
+    pb.set_message("Fetching latest release from GitHub...");
+    pb.enable_steady_tick(Duration::from_millis(80));
 
-    match client.get("https://api.github.com/repos/cuedeck/cuedeck/releases/latest")
-        .send()
-        .await 
-    {
-        Ok(resp) => {
-            if resp.status() == 404 {
-                tracing::warn!("Repository or release not found (404)");
-                eprintln!("⚠ No release found at https://github.com/cuedeck/cuedeck/releases");
-                eprintln!("  (This is expected if the repository is private or has no releases yet)");
-                return Ok(());
-            }
+    // Use self_update to check and perform update
+    let update_result = self_update::backends::github::Update::configure()
+        .repo_owner("TCTri205")
+        .repo_name("CueDeck")
+        .bin_name("cue")
+        .current_version(cargo_crate_version!())
+        .no_confirm(true)
+        .build()?
+        .update();
 
-            if !resp.status().is_success() {
-                anyhow::bail!("Failed to fetch latest version: {}", resp.status());
-            }
+    pb.finish_and_clear();
 
-            let release: serde_json::Value = resp.json().await?;
-            
-            let tag_name = release["tag_name"].as_str()
-                .ok_or_else(|| anyhow::anyhow!("Release has no tag_name"))?;
-                
-            // Handle 'v' prefix if present
-            let version_str = tag_name.trim_start_matches('v');
-            let latest_version = Version::parse(version_str)?;
-
-            if latest_version > current_version {
-                eprintln!("! New version available: {} (Current: {})", latest_version, current_version);
-                eprintln!("  Release URL: {}", release["html_url"].as_str().unwrap_or("unknown"));
-                // Future: Implement self-update (download asset, replace binary)
-                // For now, manual update instruction
-                eprintln!("  To upgrade, run: cargo install --path crates/cue_cli"); // Or download link
-            } else {
-                eprintln!("✓ You are using the latest version ({})", current_version);
+    match update_result {
+        Ok(status) => {
+            match status {
+                self_update::Status::UpToDate(v) => {
+                    eprintln!("✓ You are using the latest version ({})", v);
+                }
+                self_update::Status::Updated(v) => {
+                    eprintln!("✅ Successfully updated to version {}", v);
+                    eprintln!("   Please restart the application for changes to take effect.");
+                    
+                    #[cfg(target_os = "windows")]
+                    eprintln!("   Note: On Windows, the update will complete on next application start.");
+                    
+                    tracing::info!("Successfully updated to version {}", v);
+                }
             }
         }
         Err(e) => {
-             tracing::warn!("Failed to check for updates: {}", e);
-             eprintln!("⚠ Failed to check for updates: {}", e);
-             eprintln!("  (Check your internet connection or GitHub API status)");
+            let err_msg = e.to_string();
+            
+            if err_msg.contains("rate limit") {
+                eprintln!("⚠ GitHub API rate limit reached. Please try again later.");
+                tracing::warn!("GitHub rate limit: {}", e);
+            } else if err_msg.contains("404") || err_msg.contains("not found") {
+                eprintln!("⚠ No release found at https://github.com/TCTri205/CueDeck/releases");
+                eprintln!("  (This is expected if the repository has no releases yet)");
+                tracing::warn!("No GitHub release found: {}", e);
+            } else if err_msg.to_lowercase().contains("network") || err_msg.contains("connect") {
+                eprintln!("⚠ Network error. Check your internet connection.");
+                tracing::error!("Network error during update: {}", e);
+            } else {
+                eprintln!("⚠ Update failed: {}", e);
+                tracing::error!("Update error: {}", e);
+            }
+            
+            eprintln!("  Fallback: Download manually from https://github.com/TCTri205/CueDeck/releases/latest");
         }
     }
     
@@ -648,54 +684,80 @@ async fn cmd_watch() -> anyhow::Result<()> {
     use std::sync::mpsc::channel;
     use std::time::{Duration, Instant};
     use arboard::Clipboard;
+    use cue_core::engine::CueEngine;
 
     eprintln!("✓ Starting CueDeck Watcher...");
     eprintln!("  Watching .cuedeck/ and src/ for changes...");
 
-    let (tx, rx) = channel();
-    
-    // Initialize watcher
-    let mut watcher = notify::recommended_watcher(tx)?;
-    
-    // Watch relevant paths
     let root = std::env::current_dir()?;
+    
+    // Initialize Engine
+    use indicatif::{ProgressBar, ProgressStyle};
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(ProgressStyle::default_spinner().template("{spinner:.green} {msg}")?);
+    pb.set_message("Initializing engine...");
+    pb.enable_steady_tick(Duration::from_millis(80));
+
+    let mut engine = CueEngine::new(&root).map_err(|e| anyhow::anyhow!(e))?;
+    pb.finish_and_clear();
+    
+    // Initial build
+    eprintln!("  Initial build...");
+    match engine.render() {
+        Ok(scene) => {
+            if let Ok(mut clipboard) = Clipboard::new() {
+                if let Err(e) = clipboard.set_text(&scene) {
+                    eprintln!("⚠ Failed to update clipboard: {}", e);
+                } else {
+                     eprintln!("✓ Clipboard updated ({} tokens)", scene.len() / 4);
+                }
+            } else {
+                eprintln!("⚠ Clipboard unavailable");
+            }
+        },
+        Err(e) => eprintln!("⚠ Initial build failed: {}", e),
+    }
+
+    let (tx, rx) = channel();
+    let mut watcher = notify::recommended_watcher(tx)?;
     watcher.watch(&root, RecursiveMode::Recursive)?;
 
     let mut last_update = Instant::now();
     let debounce_duration = Duration::from_millis(500);
     
-    // Initial build
-    eprintln!("  Initial build...");
-    if let Ok(scene) = cue_core::generate_scene(&root) {
-        if let Ok(mut clipboard) = Clipboard::new() {
-            if let Err(e) = clipboard.set_text(&scene) {
-                eprintln!("⚠ Failed to update clipboard: {}", e);
-            } else {
-                 eprintln!("✓ Clipboard updated ({} tokens)", scene.len() / 4);
-            }
-        }
-    }
-
     // Event loop
     loop {
         match rx.recv() {
             Ok(Ok(event)) => {
-                // Filter irrelevant events
-                let any_relevant = event.paths.iter().any(|p| {
-                    let s = p.to_string_lossy();
-                    !s.contains("target") && 
-                    !s.contains(".git") && 
-                    !s.contains(".cache") &&
-                    // Avoid loops: don't react to SCENE.md writes
-                    !s.ends_with("SCENE.md") 
-                });
+                // Filter relevant events
+                let relevant_paths: Vec<_> = event.paths.into_iter().filter(|p| {
+                     let s = p.to_string_lossy();
+                     !s.contains("target") && 
+                     !s.contains(".git") && 
+                     !s.contains(".cuedeck\\cache") &&
+                     !s.contains(".cuedeck/cache") &&
+                     !s.ends_with("SCENE.md") &&
+                     (s.ends_with(".md") || s.ends_with("cue.toml"))
+                }).collect();
 
-                if any_relevant {
+                if !relevant_paths.is_empty() {
                     // Debounce
                     if last_update.elapsed() > debounce_duration {
-                        eprintln!("⟳ Change detected, rebuilding...");
+                        eprintln!("⟳ Change detected, updating...");
                         
-                        match cue_core::generate_scene(&root) {
+                        // Update engine state
+                        for path in relevant_paths {
+                            if path.exists() {
+                                if let Err(e) = engine.update_file(&path) {
+                                     tracing::warn!("Failed to update {:?}: {}", path, e);
+                                }
+                            } else {
+                                engine.remove_file(&path);
+                            }
+                        }
+                        
+                        // Re-render
+                        match engine.render() {
                             Ok(scene) => {
                                 match Clipboard::new() {
                                     Ok(mut clipboard) => {
@@ -741,15 +803,14 @@ async fn cmd_graph(format: String, output: Option<String>, stats: bool) -> anyho
             let name = e.file_name().to_string_lossy();
             !(name == "node_modules" || name == ".git" || name == "target" || name == "dist")
         })
+        .flatten()
     {
-        if let Ok(entry) = entry {
-            if entry.file_type().is_file() {
-                if let Some(ext) = entry.path().extension() {
-                    if ext == "md" {
-                        match cue_core::parse_file(entry.path()) {
-                            Ok(doc) => all_docs.push(doc),
-                            Err(e) => tracing::warn!("Failed to parse {:?}: {}", entry.path(), e),
-                        }
+        if entry.file_type().is_file() {
+            if let Some(ext) = entry.path().extension() {
+                if ext == "md" {
+                    match cue_core::parse_file(entry.path()) {
+                        Ok(doc) => all_docs.push(doc),
+                        Err(e) => tracing::warn!("Failed to parse {:?}: {}", entry.path(), e),
                     }
                 }
             }
@@ -787,8 +848,8 @@ async fn cmd_graph(format: String, output: Option<String>, stats: bool) -> anyho
     }
     
     // Parse format
-    let graph_format = GraphFormat::from_str(&format)
-        .ok_or_else(|| anyhow::anyhow!("Invalid format: '{}'. Use: mermaid, dot, ascii, json", format))?;
+    let graph_format: GraphFormat = format.parse()
+        .map_err(|e: String| anyhow::anyhow!("Invalid format: {}. Use: mermaid, dot, ascii, json", e))?;
     
     // Render graph
     let rendered = render(&graph, graph_format);

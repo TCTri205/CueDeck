@@ -7,12 +7,15 @@ use std::path::{Path, PathBuf};
 use std::collections::{HashMap, HashSet};
 use sha2::{Sha256, Digest};
 use std::fs;
+use rayon::prelude::*;
 
 pub mod tasks;
 pub mod context;
 pub mod embeddings;
 pub mod graph;
 pub mod graph_viz;
+pub mod cache;
+pub mod engine;
 
 /// Parse a markdown file into a Document
 #[tracing::instrument(skip_all, fields(path = ?path))]
@@ -51,13 +54,11 @@ pub fn parse_file(path: &Path) -> Result<Document> {
         (None, content.as_str())
     };
     
-    // Parse anchors (headings) using manual check (efficient enough)
-    let mut anchors = Vec::new();    // Start line parsing
-    let _current_line = 1;
-    // Adjust current_line if frontmatter was stripped?
-    // Actually, we should parse lines from original content to keep line numbers accurate.
+    // Parse anchors (headings) with proper range calculation
+    let mut anchors = Vec::new();
+    let lines: Vec<&str> = content.lines().collect();
     
-    for (i, line) in content.lines().enumerate() {
+    for (i, line) in lines.iter().enumerate() {
         if line.starts_with('#') {
             let level = line.chars().take_while(|&c| c == '#').count() as u8;
             if (1..=6).contains(&level) {
@@ -71,12 +72,20 @@ pub fn parse_file(path: &Path) -> Result<Document> {
                         .filter(|c| c.is_alphanumeric() || *c == '-')
                         .collect::<String>();
                     
+                    // Calculate end_line: extends to next heading line or EOF
+                    let end_line = lines.iter()
+                        .enumerate()
+                        .skip(i + 1)
+                        .find(|(_, next_line)| next_line.starts_with('#'))
+                        .map(|(next_i, _)| next_i + 1)  // Convert 0-index to 1-indexed line number
+                        .unwrap_or(lines.len());
+                    
                     anchors.push(Anchor {
                         slug,
                         header,
                         level,
                         start_line: i + 1,
-                        end_line: i + 1, // TODO: calculate proper range
+                        end_line,
                     });
                 }
             }
@@ -160,10 +169,9 @@ pub fn resolve_graph(docs: &[Document]) -> Result<Vec<PathBuf>> {
             if let Some(target_path) = target {
                 // Self-references don't count for cycle detection usually, but strictly they form a cycle of len 1.
                 // We'll ignore self-loops for dependency resolution.
-                if target_path != &doc.path {
-                    if !dependencies.contains(target_path) {
-                        dependencies.push(target_path.clone());
-                    }
+                if target_path != &doc.path
+                    && !dependencies.contains(target_path) {
+                    dependencies.push(target_path.clone());
                 }
             }
         }
@@ -218,98 +226,143 @@ pub fn resolve_graph(docs: &[Document]) -> Result<Vec<PathBuf>> {
     Ok(result)
 }
 
+/// Parse multiple files in parallel
+/// 
+/// # Arguments
+/// * `paths` - Iterator of file paths to parse
+/// 
+/// # Returns
+/// Vector of successfully parsed documents
+pub fn parse_files_parallel<I>(paths: I) -> Vec<Document>
+where
+    I: IntoIterator<Item = PathBuf>,
+    I::IntoIter: Send,
+{
+    let paths: Vec<PathBuf> = paths.into_iter().collect();
+    
+    paths
+        .par_iter()
+        .filter_map(|path| {
+            match parse_file(path) {
+                Ok(doc) => Some(doc),
+                Err(e) => {
+                    tracing::warn!("Failed to parse {:?}: {}", path, e);
+                    None
+                }
+            }
+        })
+        .collect()
+}
+
 /// Generate scene content
 #[tracing::instrument(skip(workspace_root), fields(workspace = ?workspace_root))]
 pub fn generate_scene(workspace_root: &Path) -> Result<String> {
-    tracing::info!("Generating scene for workspace: {:?}", workspace_root);
+    use crate::engine::CueEngine;
     
-    // Load config
-    let config = cue_config::Config::load(workspace_root)?;
-    
-    // Find all markdown files in cards/ and docs/
-    let cards_dir = workspace_root.join(".cuedeck/cards");
-    let docs_dir = workspace_root.join(".cuedeck/docs");
-    
-    let mut documents = Vec::new();
-    
-    // Parse cards if directory exists
-    if cards_dir.exists() {
-        for entry in walkdir::WalkDir::new(&cards_dir)
-            .follow_links(true)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            if entry.file_type().is_file() && entry.path().extension().is_some_and(|e| e == "md") {
-                match parse_file(entry.path()) {
-                    Ok(doc) => documents.push(doc),
-                    Err(e) => tracing::warn!("Failed to parse {:?}: {}", entry.path(), e),
-                }
-            }
-        }
-    }
-    
-    // Parse docs if directory exists
-    if docs_dir.exists() {
-        for entry in walkdir::WalkDir::new(&docs_dir)
-            .follow_links(true)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            if entry.file_type().is_file() && entry.path().extension().is_some_and(|e| e == "md") {
-                match parse_file(entry.path()) {
-                    Ok(doc) => documents.push(doc),
-                    Err(e) => tracing::warn!("Failed to parse {:?}: {}", entry.path(), e),
-                }
-            }
-        }
-    }
-    
-    // Resolve dependencies
-    let ordered = resolve_graph(&documents)?;
-    
-    // Generate scene markdown
-    let mut scene = String::from("# Scene Context\n\n");
-    scene.push_str(&format!("Generated: {}\n", chrono::Utc::now().to_rfc3339()));
-    scene.push_str(&format!("Documents: {}\n\n", documents.len()));
-    
-    let mut total_tokens = 0;
-    
-    for path in ordered.iter() {
-        if let Some(doc) = documents.iter().find(|d| &d.path == path) {
-            if total_tokens + doc.tokens > config.budgets.feature {
-                tracing::warn!("Token limit reached, truncating scene");
-                break;
-            }
-            
-            scene.push_str(&format!("## {}\n\n", path.display()));
-            scene.push_str(&format!("Tokens: {} | Hash: {}\n\n", doc.tokens, &doc.hash[..8]));
-            
-            // Add anchors
-            if !doc.anchors.is_empty() {
-                scene.push_str("### Anchors\n\n");
-                for anchor in &doc.anchors {
-                    scene.push_str(&format!("- {} (L{}): {}\n", 
-                        "#".repeat(anchor.level as usize),
-                        anchor.start_line,
-                        anchor.header
-                    ));
-                }
-                scene.push('\n');
-            }
-            
-            total_tokens += doc.tokens;
-        }
-    }
-    
-    scene.push_str(&format!("\n---\nTotal Tokens: {}\n", total_tokens));
-    
-    Ok(scene)
+    // Use the engine for Scene generation
+    // This ensures consistent behavior between CLI one-off and watch mode
+    let engine = CueEngine::new(workspace_root)?;
+    engine.render()
 }
 
 #[cfg(test)]
 mod tests {
-    // use super::*; // Unused
-    // use std::path::PathBuf; // Unused 
-
-    // TODO: Add real tests with temporary files
+    use super::*;
+    use assert_fs::prelude::*;
+    
+    #[test]
+    fn test_parse_file_basic() {
+        let temp = assert_fs::TempDir::new().unwrap();
+        let file = temp.child("test.md");
+        file.write_str("# Hello\n\nContent").unwrap();
+        
+        let doc = parse_file(file.path()).unwrap();
+        assert_eq!(doc.anchors.len(), 1);
+        assert_eq!(doc.anchors[0].header, "Hello");
+        assert_eq!(doc.anchors[0].level, 1);
+    }
+    
+    #[test]
+    fn test_parse_file_with_frontmatter() {
+        let temp = assert_fs::TempDir::new().unwrap();
+        let file = temp.child("card.md");
+        file.write_str("---\ntitle: Test Card\ntype: feature\n---\n# Content\n\nBody").unwrap();
+        
+        let doc = parse_file(file.path()).unwrap();
+        assert!(doc.frontmatter.is_some());
+        let fm = doc.frontmatter.unwrap();
+        assert_eq!(fm.title, "Test Card");
+    }
+    
+    #[test]
+    fn test_parse_file_anchor_ranges() {
+        let temp = assert_fs::TempDir::new().unwrap();
+        let file = temp.child("test.md");
+        file.write_str("# First\nContent 1\n## Second\nContent 2\n### Third\nContent 3").unwrap();
+        
+        let doc = parse_file(file.path()).unwrap();
+        assert_eq!(doc.anchors.len(), 3);
+        
+        // First heading spans until second heading
+        assert_eq!(doc.anchors[0].start_line, 1);
+        assert_eq!(doc.anchors[0].end_line, 3);
+        
+        // Second heading spans until third
+        assert_eq!(doc.anchors[1].start_line, 3);
+        assert_eq!(doc.anchors[1].end_line, 5);
+        
+        // Third heading spans to EOF
+        assert_eq!(doc.anchors[2].start_line, 5);
+        assert_eq!(doc.anchors[2].end_line, 6);
+    }
+    
+    #[test]
+    fn test_parse_file_links() {
+        let temp = assert_fs::TempDir::new().unwrap();
+        let file = temp.child("test.md");
+        file.write_str("# Test\n\nSee [[other-doc]] and [[another]]").unwrap();
+        
+        let doc = parse_file(file.path()).unwrap();
+        assert_eq!(doc.links.len(), 2);
+        assert!(doc.links.contains(&"other-doc".to_string()));
+        assert!(doc.links.contains(&"another".to_string()));
+    }
+    
+    #[test]
+    fn test_resolve_graph_simple() {
+        let temp = assert_fs::TempDir::new().unwrap();
+        
+        let a = temp.child("a.md");
+        a.write_str("---\ntitle: A\ntype: feature\n---\n# A").unwrap();
+        
+        let b = temp.child("b.md");
+        b.write_str("---\ntitle: B\ntype: feature\n---\n# B\n\n[[A]]").unwrap();
+        
+        let doc_a = parse_file(a.path()).unwrap();
+        let doc_b = parse_file(b.path()).unwrap();
+        
+        let result = resolve_graph(&[doc_a.clone(), doc_b.clone()]).unwrap();
+        
+        // B depends on A, so A should come before B
+        let a_pos = result.iter().position(|p| p == &doc_a.path).unwrap();
+        let b_pos = result.iter().position(|p| p == &doc_b.path).unwrap();
+        assert!(a_pos < b_pos);
+    }
+    
+    #[test]
+    fn test_resolve_graph_cycle_detection() {
+        let temp = assert_fs::TempDir::new().unwrap();
+        
+        let a = temp.child("a.md");
+        a.write_str("---\ntitle: A\ntype: feature\n---\n# A\n\n[[B]]").unwrap();
+        
+        let b = temp.child("b.md");
+        b.write_str("---\ntitle: B\ntype: feature\n---\n# B\n\n[[A]]").unwrap();
+        
+        let doc_a = parse_file(a.path()).unwrap();
+        let doc_b = parse_file(b.path()).unwrap();
+        
+        let result = resolve_graph(&[doc_a, doc_b]);
+        assert!(result.is_err());
+    }
 }

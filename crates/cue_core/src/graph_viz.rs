@@ -23,14 +23,16 @@ pub enum GraphFormat {
     Json,
 }
 
-impl GraphFormat {
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for GraphFormat {
+    type Err = String;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "mermaid" => Some(Self::Mermaid),
-            "dot" => Some(Self::Dot),
-            "ascii" => Some(Self::Ascii),
-            "json" => Some(Self::Json),
-            _ => None,
+            "mermaid" => Ok(Self::Mermaid),
+            "dot" => Ok(Self::Dot),
+            "ascii" => Ok(Self::Ascii),
+            "json" => Ok(Self::Json),
+            _ => Err(format!("Unknown format: {}", s)),
         }
     }
 }

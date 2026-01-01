@@ -63,15 +63,16 @@ fn search_workspace_keyword(root: &Path, query: &str) -> Result<Vec<Document>> {
 
 /// Semantic search using vector embeddings
 fn search_workspace_semantic(root: &Path, query: &str, limit: usize) -> Result<Vec<Document>> {
+    use rayon::prelude::*;
+    
     tracing::info!("Performing semantic search for: '{}'", query);
     
     // Generate query embedding
     let query_embedding = EmbeddingModel::embed(query)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
     
-    let mut candidates: Vec<(Document, f32)> = Vec::new();
-    
-    // Walk files
+    // Collect all markdown files first
+    let mut md_files = Vec::new();
     let walker = WalkDir::new(root)
         .follow_links(true)
         .into_iter()
@@ -81,44 +82,55 @@ fn search_workspace_semantic(root: &Path, query: &str, limit: usize) -> Result<V
         if entry.file_type().is_file() {
             if let Some(ext) = entry.path().extension() {
                 if ext == "md" {
-                    match parse_file(entry.path()) {
-                        Ok(doc) => {
-                            // Read file content for embedding
-                            if let Ok(content) = std::fs::read_to_string(&doc.path) {
-                                // Truncate very long files to avoid embedding overhead
-                                let content_sample = if content.len() > 5000 {
-                                    &content[..5000]
-                                } else {
-                                    &content
-                                };
-                                
-                                match EmbeddingModel::embed(content_sample) {
-                                    Ok(doc_embedding) => {
-                                        let similarity = EmbeddingModel::cosine_similarity(
-                                            &query_embedding,
-                                            &doc_embedding
-                                        );
-                                        candidates.push((doc, similarity));
-                                    }
-                                    Err(_e) => {
-                                        // Skip files that fail to embed
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => tracing::warn!("Failed to parse {:?}: {}", entry.path(), e),
-                    }
+                    md_files.push(entry.path().to_path_buf());
                 }
             }
         }
     }
     
+    // Parallel processing: parse + embed + score
+    let candidates: Vec<(Document, f32)> = md_files
+        .par_iter()
+        .filter_map(|path| {
+            match parse_file(path) {
+                Ok(doc) => {
+                    // Read file content for embedding
+                    if let Ok(content) = std::fs::read_to_string(&doc.path) {
+                        // Truncate very long files to avoid embedding overhead
+                        let content_sample = if content.len() > 5000 {
+                            &content[..5000]
+                        } else {
+                            &content
+                        };
+                        
+                        match EmbeddingModel::embed(content_sample) {
+                            Ok(doc_embedding) => {
+                                let similarity = EmbeddingModel::cosine_similarity(
+                                    &query_embedding,
+                                    &doc_embedding
+                                );
+                                Some((doc, similarity))
+                            }
+                            Err(_) => None,
+                        }
+                    } else {
+                        None
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to parse {:?}: {}", path, e);
+                    None
+                }
+            }
+        })
+        .collect();
+    
     // Sort by similarity descending
-    candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let mut sorted_candidates = candidates;
+    sorted_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     
     // Return top N
-    Ok(candidates.into_iter()
+    Ok(sorted_candidates.into_iter()
         .take(limit)
         .map(|(doc, _)| doc)
         .collect())
