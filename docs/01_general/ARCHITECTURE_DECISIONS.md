@@ -353,6 +353,193 @@ fn calculate_priority(node: &Node) -> f32 {
 
 ---
 
+## ADR-006: Hybrid Database Backend
+
+**Status**: Accepted  
+**Date**: 2026-01-02  
+**Deciders**: Core Team
+
+### Context
+
+Current JSON-based metadata storage performs well for small workspaces (< 500 files) but will slow down significantly at 1000+ files. Need to decide on storage backend for Phase 7 performance optimization.
+
+### Decision
+
+Use **Hybrid Approach**: Keep JSON/TOML for human-readable config, migrate to SQLite for performance-critical metadata.
+
+### Rationale
+
+**Current Performance** (v2.2.0 benchmarks):
+
+- Parse 100 files: 91.2ms (~912 µs/file)
+- Linear scan for filtering: O(n) complexity
+- Projected 1000 files: ~1s+ (unacceptable)
+
+**Storage Strategy**:
+
+| Data Type | Current | Phase 7 | Reasoning |
+| :--- | :--- | :--- | :--- |
+| `.cuedeck/config.toml` | TOML | **TOML** | User-editable, rarely changes |
+| `.cuedeck/cache/metadata.json` | JSON | **SQLite** | Frequently queried, needs indexing |
+| `.cuedeck/cache/embeddings.bin` | Binary | **Binary** | Already optimized |
+| Document content | Markdown | **Markdown** | Keep source files human-readable |
+
+**Why Not Full SQL?**
+
+- Lose human-readable advantage (can't `cat config.toml`)
+- Migration complexity too high
+- Config rarely needs query optimization
+
+**Why Not Keep JSON?**
+
+```text
+Benchmark projections:
+JSON scan (1000 files):  ~1200ms
+SQLite query (indexed):  ~50ms (24x faster!)
+```
+
+**SQLite Advantages**:
+
+- ✅ **Fast queries**: SQL WHERE clauses with indexes
+- ✅ **ACID transactions**: No corruption on crash
+- ✅ **Smaller memory**: Lazy loading vs full JSON in RAM
+- ✅ **Still local-first**: SQLite is just a file
+
+### Migration Path
+
+**Gradual, Non-Breaking**:
+
+1. **v2.3.0 (Q3 2026)**: Add SQLite backend (opt-in via config)
+2. **v2.4.0**: Auto-migrate on first run if `> 500 files`
+3. **v3.0.0**: Make SQLite default, keep JSON fallback
+
+**User Impact**: Zero. Migration automatic, rollback supported.
+
+### Consequences
+
+**Positive**:
+
+- 24x faster metadata queries
+- Supports 10,000+ files workspace
+- No corruption risk (ACID)
+- Memory footprint reduced
+
+**Negative**:
+
+- Can't manually inspect `metadata.db` (need SQL tool)
+- One more dependency (`rusqlite`)
+- Migration testing required
+
+**Mitigations**:
+
+- Provide `cue doctor --export-metadata` for inspection
+- Keep JSON export option for debugging
+- Comprehensive migration tests
+
+---
+
+## ADR-007: Client-to-Cloud Sync Architecture
+
+**Status**: Accepted  
+**Date**: 2026-01-02  
+**Deciders**: Core Team
+
+### Context
+
+Users want backup and multi-device sync for `.cuedeck/` workspace. Need to decide: centralized server vs user-owned cloud storage.
+
+### Decision
+
+Use **Client-to-Cloud** architecture where CueDeck syncs directly to user-owned storage (S3/GCS/Azure).
+
+### Rationale
+
+**Architecture Comparison**:
+
+| Aspect | Client-to-Cloud (Chosen) | CueDeck Cloud Server |
+| :--- | :--- | :--- |
+| **Privacy** | ✅ Data in user's bucket | ❌ Data on our servers |
+| **Cost (User)** | ✅ ~$0.02/GB/month | ❌ $5-10/month subscription |
+| **Cost (Us)** | ✅ $0 (serverless) | ❌ $100s/month infrastructure |
+| **Maintenance** | ✅ Zero (user manages bucket) | ❌ 24/7 server monitoring |
+| **Setup Complexity** | ⚠️ Requires bucket config | ✅ Just login |
+| **Philosophy** | ✅ Aligns with ADR-004 (Local-First) | ❌ Contradicts core philosophy |
+
+**Why Not Centralized Server?**
+
+- **Privacy concerns**: Sensitive code in our hands
+- **Operational burden**: 24/7 uptime, security patches
+- **Cost barrier**: $10/mo subscription limits adoption
+- **Philosophy violation**: CueDeck is proudly local-first
+
+**User Configuration Example**:
+
+```toml
+[sync]
+enabled = true
+provider = "s3"  # or "gcs", "azure"
+bucket = "my-cuedeck-backup"
+region = "us-east-1"
+encryption_key_path = "~/.cuedeck/sync.key"
+```
+
+**Security Model**:
+
+```mermaid
+graph LR
+    A[Local .cuedeck/] -->|Encrypt| B[ChaCha20-Poly1305]
+    B -->|Upload| C[User's S3 Bucket]
+    C -->|Download| D[ChaCha20-Poly1305]
+    D -->|Decrypt| E[Local .cuedeck/]
+    
+    style B fill:#f9f,stroke:#333
+    style D fill:#f9f,stroke:#333
+```
+
+**End-to-End Encryption**:
+
+- User generates 256-bit key locally
+- All data encrypted before upload
+- Cloud provider sees only ciphertext
+- Key never leaves user's machine
+
+### Cloud Provider Support
+
+1. **AWS S3**: `aws-sdk-s3` crate
+2. **Google Cloud Storage**: `google-cloud-storage` crate
+3. **Azure Blob Storage**: `azure_storage_blobs` crate
+4. **Generic S3-compatible**: MinIO, BackBlaze B2, etc.
+
+### Consequences
+
+**Positive**:
+
+- Maximum privacy (user controls data)
+- Zero recurring costs for us
+- Scalable (cloud provider handles load)
+- Aligns with local-first philosophy
+
+**Negative**:
+
+- Setup complexity (user needs cloud account)
+- Limited to tech-savvy users initially
+- No centralized user management
+- Support burden (help with cloud config)
+
+**Mitigations**:
+
+- Detailed setup guides for each provider
+- Interactive `cue sync config` wizard
+- Validate bucket permissions before sync
+- Provide S3-compatible free tier recommendations (BackBlaze, MinIO)
+
+**Future Enhancements**:
+
+- Phase 6.1: GitHub as sync backend (free for public repos)
+- Phase 8: P2P sync via CRDT (no cloud needed)
+
+---
+
 ## Summary Table
 
 | ADR | Decision | Key Rationale |
@@ -362,6 +549,8 @@ fn calculate_priority(node: &Node) -> f32 {
 | **ADR-003** | MCP Protocol | Native AI tool support, simple stdio |
 | **ADR-004** | Local-First | Privacy, speed, offline support |
 | **ADR-005** | Greedy Knapsack | Fast (<1ms), good enough (85-95% optimal) |
+| **ADR-006** | Hybrid Database (JSON + SQLite) | **Performance (24x faster), scalability (10K+ files)** |
+| **ADR-007** | Client-to-Cloud Sync | **Privacy ($0 cost), aligns with local-first** |
 
 ---
 

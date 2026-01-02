@@ -2,7 +2,7 @@
 
 **Welcome to CueDeck.** This index maps the entire knowledge base.
 
-> **Last Updated**: 2025-12-31 | **Total Files**: 44
+>> **Last Updated**: 2026-01-02 | **Total Files**: 45
 
 ## 📚 1. Start Here (Orientation)
 
@@ -64,6 +64,7 @@
 | File | Purpose |
 | :--- | :--- |
 | [`05_quality_and_ops/TESTING_STRATEGY.md`](./05_quality_and_ops/TESTING_STRATEGY.md) | Unit, Integ, Watcher tests. |
+| [`05_quality_and_ops/BENCHMARKING.md`](./05_quality_and_ops/BENCHMARKING.md) | **New!** Performance benchmarks, baseline metrics, regression detection. |
 | [`05_quality_and_ops/LOGGING_AND_TELEMETRY.md`](./05_quality_and_ops/LOGGING_AND_TELEMETRY.md) | Tracing strategy & Log levels. |
 | [`05_quality_and_ops/EVALUATION_METRICS.md`](./05_quality_and_ops/EVALUATION_METRICS.md) | Performance KPIs, Token Efficiency, Measurement Cadence. |
 | [`05_quality_and_ops/TROUBLESHOOTING.md`](./05_quality_and_ops/TROUBLESHOOTING.md) | Fixes for common errors. |
