@@ -18,6 +18,12 @@ pub enum CueError {
     #[error("Cycle detected in dependency graph")]
     CycleDetected,
 
+    #[error("Circular dependency detected: {0}")]
+    CircularDependency(String),
+
+    #[error("Dependency not found: {0}")]
+    DependencyNotFound(String),
+
     #[error("Token limit exceeded: {current} > {limit}")]
     TokenLimit { current: usize, limit: usize },
 
@@ -78,6 +84,10 @@ pub struct CardMetadata {
     /// Creation timestamp (ISO 8601)
     #[serde(default)]
     pub created: Option<String>,
+
+    /// Task IDs this task depends on
+    #[serde(default)]
+    pub depends_on: Option<Vec<String>>,
 }
 
 fn default_status() -> String {
@@ -127,6 +137,15 @@ pub struct Anchor {
 
     /// End line number (inclusive, 1-indexed)
     pub end_line: usize,
+}
+
+/// Represents a task dependency relationship
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TaskDependency {
+    /// ID of the task that has the dependency
+    pub from_id: String,
+    /// ID of the task that is depended upon
+    pub to_id: String,
 }
 
 /// Result type alias

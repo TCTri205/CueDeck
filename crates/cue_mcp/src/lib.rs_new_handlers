@@ -1,0 +1,104 @@
+
+/// Get task dependencies handler
+async fn handle_get_task_dependencies(params: Option<Value>) -> Result<Value> {
+    #[derive(Deserialize)]
+    struct GetDepsParams {
+        id: String,
+        #[serde(default)]
+        reverse: bool,
+    }
+
+    let params: GetDepsParams = serde_json::from_value(params.unwrap_or_default())?;
+    let workspace = get_workspace_root()?;
+
+    if params.reverse {
+        // Get dependents (tasks that depend on this task)
+        let dependents = cue_core::tasks::get_task_dependents(&workspace, &params.id)?;
+
+        let mut dep_details = Vec::new();
+        for dep in dependents {
+            let task_path = workspace.join(format!(".cuedeck/cards/{}.md", dep.from_id));
+            if let Ok(doc) = cue_core::parse_file(&task_path) {
+                dep_details.push(serde_json::json!({
+                    "id": dep.from_id,
+                    "title": doc.frontmatter.as_ref().map(|m| m.title.as_str()).unwrap_or("Untitled"),
+                    "status": doc.frontmatter.as_ref().map(|m| m.status.as_str()).unwrap_or("unknown"),
+                }));
+            }
+        }
+
+        Ok(serde_json::json!({
+            "task_id": params.id,
+            "type": "dependents",
+            "count": dep_details.len(),
+            "tasks": dep_details,
+        }))
+    } else {
+        // Get dependencies (tasks this task depends on)
+        let dependencies = cue_core::tasks::get_task_dependencies(&workspace, &params.id)?;
+
+        let mut dep_details = Vec::new();
+        for dep in dependencies {
+            let task_path = workspace.join(format!(".cuedeck/cards/{}.md", dep.to_id));
+            if let Ok(doc) = cue_core::parse_file(&task_path) {
+                dep_details.push(serde_json::json!({
+                    "id": dep.to_id,
+                    "title": doc.frontmatter.as_ref().map(|m| m.title.as_str()).unwrap_or("Untitled"),
+                    "status": doc.frontmatter.as_ref().map(|m| m.status.as_str()).unwrap_or("unknown"),
+                }));
+            }
+        }
+
+        Ok(serde_json::json!({
+            "task_id": params.id,
+            "type": "dependencies",
+            "count": dep_details.len(),
+            "tasks": dep_details,
+        }))
+    }
+}
+
+/// Validate task dependency graph handler
+async fn handle_validate_task_graph(params: Option<Value>) -> Result<Value> {
+    #[derive(Deserialize)]
+    struct ValidateParams {
+        id: Option<String>,
+    }
+
+    let params: ValidateParams = serde_json::from_value(params.unwrap_or_default())?;
+    let workspace = get_workspace_root()?;
+
+    if let Some(task_id) = params.id {
+        // Validate specific task
+        let deps = cue_core::tasks::get_task_dependencies(&workspace, &task_id)?;
+        let dep_ids: Vec<String> = deps.into_iter().map(|d| d.to_id).collect();
+
+        match cue_core::tasks::validate_task_dependencies(&workspace, &task_id, &dep_ids) {
+            Ok(_) => Ok(serde_json::json!({
+                "valid": true,
+                "task_id": task_id,
+                "message": "Task dependencies are valid",
+            })),
+            Err(e) => Ok(serde_json::json!({
+                "valid": false,
+                "task_id": task_id,
+                "error": e.to_string(),
+            })),
+        }
+    } else {
+        // Validate entire task graph
+        use cue_core::task_graph::TaskGraph;
+
+        let graph = TaskGraph::from_workspace(&workspace)?;
+        match graph.validate_dependencies() {
+            Ok(_) => Ok(serde_json::json!({
+                "valid": true,
+                "message": "All task dependencies are valid (no circular dependencies)",
+            })),
+            Err(e) => Ok(serde_json::json!({
+                "valid": false,
+                "error": e.to_string(),
+            })),
+        }
+    }
+}

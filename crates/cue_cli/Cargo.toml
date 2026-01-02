@@ -36,3 +36,4 @@ self_update.workspace = true
 assert_cmd.workspace = true
 predicates.workspace = true
 assert_fs.workspace = true
+tempfile = "3.0"

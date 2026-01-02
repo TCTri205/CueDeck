@@ -301,7 +301,282 @@
 }
 ```
 
-### 4. `update_task`
+### 4. `create_task`
+
+- **Description**: Create a new task card with rich metadata and dependency tracking.
+- **Complexity**: O(1) for task creation + O(d) for dependency validation where d = number of dependencies
+- **Input Schema**:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Task title",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional tags for categorization"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"],
+      "default": "medium",
+      "description": "Task priority level"
+    },
+    "assignee": {
+      "type": "string",
+      "description": "Person assigned to this task"
+    },
+    "depends_on": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]{6}$"
+      },
+      "description": "Task IDs this task depends on"
+    }
+  },
+  "required": ["title"]
+}
+```
+
+- **Output Schema**:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9]{6}$" },
+    "path": { "type": "string" },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "status": { "type": "string" },
+        "priority": { "type": "string" },
+        "assignee": { "type": ["string", "null"] },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "depends_on": { "type": "array", "items": { "type": "string" } },
+        "created": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "required": ["id", "path", "metadata"]
+}
+```
+
+**Example Request**:
+
+```json
+{
+  "title": "Implement login API",
+  "tags": ["auth", "backend"],
+  "priority": "high",
+  "assignee": "@developer",
+  "depends_on": ["abc123", "def456"]
+}
+```
+
+**Example Response**:
+
+```json
+{
+  "id": "xyz789",
+  "path": ".cuedeck/cards/xyz789.md",
+  "metadata": {
+    "title": "Implement login API",
+    "status": "todo",
+    "priority": "high",
+    "assignee": "@developer",
+    "tags": ["auth", "backend"],
+    "depends_on": ["abc123", "def456"],
+    "created": "2026-01-02T10:43:00Z"
+  }
+}
+```
+
+**Error Responses**:
+
+- `DependencyNotFound`: If a task ID in `depends_on` does not exist
+- `CircularDependency`: If adding dependencies would create a cycle
+
+### 5. `get_task_dependencies`
+
+- **Description**: Get dependencies for a task (forward or reverse).
+- **Complexity**: O(n) where n = total tasks (builds graph), O(d) for query where d = direct dependencies
+- **Input Schema**:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]{6}$",
+      "description": "Task ID to query"
+    },
+    "reverse": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, get dependents (tasks that depend on this task)"
+    }
+  },
+  "required": ["id"]
+}
+```
+
+- **Output Schema**:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task_id": { "type": "string" },
+    "type": { "type": "string", "enum": ["dependencies", "dependents"] },
+    "count": { "type": "integer" },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "status": { "type": "string" }
+        }
+      }
+    }
+  },
+  "required": ["task_id", "type", "count", "tasks"]
+}
+```
+
+**Example Request (Dependencies)**:
+
+```json
+{
+  "id": "xyz789",
+  "reverse": false
+}
+```
+
+**Example Response**:
+
+```json
+{
+  "task_id": "xyz789",
+  "type": "dependencies",
+  "count": 2,
+  "tasks": [
+    { "id": "abc123", "title": "Setup auth framework", "status": "done" },
+    { "id": "def456", "title": "Create user database", "status": "active" }
+  ]
+}
+```
+
+**Example Request (Dependents - Reverse)**:
+
+```json
+{
+  "id": "xyz789",
+  "reverse": true
+}
+```
+
+**Example Response**:
+
+```json
+{
+  "task_id": "xyz789",
+  "type": "dependents",
+  "count": 1,
+  "tasks": [
+    { "id": "ghi012", "title": "Add login UI", "status": "todo" }
+  ]
+}
+```
+
+### 6. `validate_task_graph`
+
+- **Description**: Validate task dependency graph for circular dependencies.
+- **Complexity**: O(n + e) where n = tasks, e = dependency edges (cycle detection via DFS)
+- **Input Schema**:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]{6}$",
+      "description": "Optional: validate specific task only"
+    }
+  }
+}
+```
+
+- **Output Schema**:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "valid": { "type": "boolean" },
+    "task_id": { "type": "string" },
+    "message": { "type": "string" },
+    "error": { "type": "string" }
+  },
+  "required": ["valid"]
+}
+```
+
+**Example Request (Full Graph)**:
+
+```json
+{}
+```
+
+**Example Response (Valid)**:
+
+```json
+{
+  "valid": true,
+  "message": "All task dependencies are valid (no circular dependencies)"
+}
+```
+
+**Example Response (Invalid - Cycle Detected)**:
+
+```json
+{
+  "valid": false,
+  "error": "Circular dependency detected: abc123 → def456 → ghi789 → abc123"
+}
+```
+
+**Example Request (Specific Task)**:
+
+```json
+{
+  "id": "xyz789"
+}
+```
+
+**Example Response**:
+
+```json
+{
+  "valid": true,
+  "task_id": "xyz789",
+  "message": "Task dependencies are valid"
+}
+```
+
+### 7. `update_task`
 
 - **Description**: Modify a task card's frontmatter.
 - **Complexity**: O(1) for metadata update + O(n) for file write where n = card size

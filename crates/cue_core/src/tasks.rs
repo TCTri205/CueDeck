@@ -78,14 +78,67 @@ fn priority_score(p: &str) -> i32 {
 
 /// Create a new task card
 pub fn create_task(workspace_root: &Path, title: &str) -> Result<PathBuf> {
+    create_task_with_metadata(workspace_root, title, None, None, None, None)
+}
+
+/// Create a new task card with metadata
+pub fn create_task_with_metadata(
+    workspace_root: &Path,
+    title: &str,
+    tags: Option<Vec<String>>,
+    priority: Option<&str>,
+    assignee: Option<&str>,
+    depends_on: Option<Vec<String>>,
+) -> Result<PathBuf> {
     use rand::Rng;
 
+    // Validate dependencies exist before creating task
+    if let Some(deps) = &depends_on {
+        for dep_id in deps {
+            let dep_path = workspace_root
+                .join(".cuedeck/cards")
+                .join(format!("{}.md", dep_id));
+            if !dep_path.exists() {
+                return Err(CueError::DependencyNotFound(dep_id.clone()));
+            }
+        }
+
+        // Generate task ID first for validation
+        let id: String = rand::thread_rng()
+            .sample_iter(&rand::distributions::Alphanumeric)
+            .take(6)
+            .map(char::from)
+            .collect::<String>()
+            .to_lowercase();
+
+        // Check for circular dependencies before creating task
+        validate_task_dependencies(workspace_root, &id, deps)?;
+
+        // Continue with the generated ID
+        return create_task_with_id(workspace_root, &id, title, tags, priority, assignee, depends_on);
+    }
+
+    // No dependencies, create task normally
     let id: String = rand::thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
         .take(6)
         .map(char::from)
         .collect::<String>()
         .to_lowercase();
+    
+    create_task_with_id(workspace_root, &id, title, tags, priority, assignee, depends_on)
+}
+
+/// Internal helper to create task with pre-generated ID
+fn create_task_with_id(
+    workspace_root: &Path,
+    id: &str,
+    title: &str,
+    tags: Option<Vec<String>>,
+    priority: Option<&str>,
+    assignee: Option<&str>,
+    depends_on: Option<Vec<String>>,
+) -> Result<PathBuf> {
 
     let filename = workspace_root
         .join(".cuedeck/cards")
@@ -96,24 +149,61 @@ pub fn create_task(workspace_root: &Path, title: &str) -> Result<PathBuf> {
         fs::create_dir_all(parent)?;
     }
 
-    let template = format!(
-        r#"---
-title: "{}"
-status: todo
-assignee: ""
-priority: medium
-created: {}
----
+    // Build frontmatter with optional fields
+    let priority_str = priority.unwrap_or("medium");
+    let created_str = chrono::Utc::now().to_rfc3339();
 
+    let mut frontmatter = format!(
+        r#"---
+title: {}
+status: todo
+priority: {}
+created: {}"#,
+        title, priority_str, created_str
+    );
+
+    // Add assignee if provided (don't quote if starts with @)
+    if let Some(a) = assignee {
+        if !a.is_empty() {
+            if a.starts_with('@') {
+                frontmatter.push_str(&format!("\nassignee: {}", a));
+            } else {
+                frontmatter.push_str(&format!("\nassignee: \"{}\"", a));
+            }
+        }
+    }
+
+    // Add tags if provided
+    if let Some(tag_list) = tags {
+        if !tag_list.is_empty() {
+            frontmatter.push_str("\ntags:");
+            for tag in tag_list {
+                frontmatter.push_str(&format!("\n  - {}", tag));
+            }
+        }
+    }
+
+    // Add depends_on if provided
+    if let Some(dep_list) = depends_on {
+        if !dep_list.is_empty() {
+            frontmatter.push_str("\ndepends_on:");
+            for dep in dep_list {
+                frontmatter.push_str(&format!("\n  - {}", dep));
+            }
+        }
+    }
+
+    frontmatter.push_str("\n---\n");
+
+    let template = format!(
+        r#"{}
 # {}
 
 ## Description
 
 [Add description]
 "#,
-        title,
-        chrono::Utc::now().to_rfc3339(),
-        title
+        frontmatter, title
     );
 
     fs::write(&filename, template)?;
@@ -187,4 +277,78 @@ pub fn update_task(
             "No frontmatter found in card".to_string(),
         ))
     }
+}
+
+/// Validate task dependencies don't create cycles
+pub fn validate_task_dependencies(
+    workspace_root: &Path,
+    task_id: &str,
+    new_deps: &[String],
+) -> Result<()> {
+    use crate::task_graph::TaskGraph;
+
+    // Build current task graph
+    let mut graph = TaskGraph::from_workspace(workspace_root)?;
+
+    // Simulate adding new dependencies
+    for dep_id in new_deps {
+        // Check if would create cycle
+        if graph.would_create_cycle(task_id, dep_id) {
+            return Err(CueError::CircularDependency(format!(
+                "{} -> {}",
+                task_id, dep_id
+            )));
+        }
+
+        // Check if dependency exists
+        let dep_path = workspace_root
+            .join(".cuedeck/cards")
+            .join(format!("{}.md", dep_id));
+        if !dep_path.exists() {
+            return Err(CueError::DependencyNotFound(dep_id.clone()));
+        }
+
+        // Add temporarily to check next dependency
+        graph.add_dependency(task_id, dep_id)?;
+    }
+
+    Ok(())
+}
+
+/// Get task dependencies
+pub fn get_task_dependencies(
+    workspace_root: &Path,
+    task_id: &str,
+) -> Result<Vec<cue_common::TaskDependency>> {
+    use crate::task_graph::TaskGraph;
+
+    let graph = TaskGraph::from_workspace(workspace_root)?;
+    let deps = graph.get_dependencies(task_id);
+
+    Ok(deps
+        .into_iter()
+        .map(|to_id| cue_common::TaskDependency {
+            from_id: task_id.to_string(),
+            to_id,
+        })
+        .collect())
+}
+
+/// Get tasks that depend on this task (reverse dependencies)
+pub fn get_task_dependents(
+    workspace_root: &Path,
+    task_id: &str,
+) -> Result<Vec<cue_common::TaskDependency>> {
+    use crate::task_graph::TaskGraph;
+
+    let graph = TaskGraph::from_workspace(workspace_root)?;
+    let dependents = graph.get_dependents(task_id);
+
+    Ok(dependents
+        .into_iter()
+        .map(|from_id| cue_common::TaskDependency {
+            from_id,
+            to_id: task_id.to_string(),
+        })
+        .collect())
 }

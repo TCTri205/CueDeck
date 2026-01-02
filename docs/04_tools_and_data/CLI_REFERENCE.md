@@ -262,3 +262,121 @@ Starts the MCP (Model Context Protocol) Server for AI integration (Module 3).
 
 ---
 **Related Docs**: [MODULE_DESIGN.md](../02_architecture/MODULE_DESIGN.md), [USER_STORIES.md](../01_general/USER_STORIES.md), [TOOLS_SPEC.md](./TOOLS_SPEC.md)
+
+## `cue card` commands
+
+Manage task cards with rich metadata and dependency tracking.
+
+### `cue card create`
+
+Create a new task card with optional metadata.
+
+- **Usage**:
+
+  ```bash
+  cue card create <title> [OPTIONS]
+  ```
+
+- **Arguments**:
+  - `<title>`: Task title (required)
+
+- **Flags**:
+  - `--tags, -t <tags>`: Comma-separated tags for categorization
+  - `--priority, -p <priority>`: Task priority (`low`, `medium`, `high`, `critical`, default: `medium`)
+  - `--assignee, -a <assignee>`: Person assigned to the task
+  - `--depends-on, -d <task-ids>`: Comma-separated task IDs this task depends on
+
+- **Examples**:
+
+  ```bash
+  # Simple task
+  cue card create "Implement login feature"
+  
+  # Task with metadata
+  cue card create "Add user authentication" \
+    --tags auth,backend \
+    --priority high \
+    --assignee @developer
+  
+  # Task with dependencies
+  cue card create "Add login UI" \
+    --depends-on abc123,def456 \
+    --tags frontend,auth
+  ```
+
+- **Output**: Creates `.cuedeck/cards/<ID>.md` and displays task ID
+- **Validation**:
+  - Checks that dependency task IDs exist
+  - Prevents circular dependencies
+
+### `cue card deps`
+
+Show task dependencies or dependents.
+
+- **Usage**:
+
+  ```bash
+  cue card deps <task-id> [--reverse]
+  ```
+
+- **Arguments**:
+  - `<task-id>`: 6-character task ID
+
+- **Flags**:
+  - `--reverse, -r`: Show tasks that depend on this task (reverse dependencies)
+
+- **Examples**:
+
+  ```bash
+  # Show what task xyz789 depends on
+  cue card deps xyz789
+  Output:
+    Dependencies for xyz789 (Implement login):
+      → abc123: Setup auth framework
+      → def456: Create user database
+  
+  # Show what depends on xyz789
+  cue card deps xyz789 --reverse
+  Output:
+    Tasks depending on xyz789 (Implement login):
+      ← ghi012: Add login UI
+      ← jkl345: Add password reset
+  ```
+
+### `cue card validate`
+
+Validate task dependency graph for circular dependencies.
+
+- **Usage**:
+
+  ```bash
+  cue card validate [<task-id>]
+  ```
+
+- **Arguments**:
+  - `<task-id>` (optional): Validate specific task only
+
+- **Examples**:
+
+  ```bash
+  # Validate entire task graph
+  cue card validate
+  Output:
+    ✅ All task dependencies are valid (no circular dependencies)
+  
+  # Validate specific task
+  cue card validate xyz789
+  Output:
+    ✅ Task xyz789 dependencies are valid
+  
+  # Example error (circular dependency detected)
+  cue card validate
+  Output:
+    ❌ Circular dependency detected: abc123 → def456 → ghi789 → abc123
+  ```
+
+- **Exit Code**:
+  - `0`: All dependencies valid
+  - `1`: Circular dependency detected
+
+---

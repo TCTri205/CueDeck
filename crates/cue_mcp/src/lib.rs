@@ -219,6 +219,9 @@ async fn handle_tools_call(params: Option<Value>) -> Result<Value> {
         "read_doc" => handle_read_doc(args).await?,
         "list_tasks" => handle_list_tasks(args).await?,
         "create_task" => handle_create_task(args).await?,
+        "get_task_dependencies" => handle_get_task_dependencies(args).await?,
+        "validate_task_graph" => handle_validate_task_graph(args).await?,
+        "query_graph" => handle_query_graph(args).await?,
         "update_task" => handle_update_task(args).await?,
         _ => {
             return Err(CueError::ValidationError(format!(
@@ -254,8 +257,13 @@ async fn handle_tools_list() -> Result<Value> {
                         },
                         "limit": {
                             "type": "integer",
-                            "description": "Max number of results (default: 5)",
-                            "default": 5
+                            "description": "Max results per page (default: 10, max: 50)",
+                            "default": 10,
+                            "maximum": 50
+                        },
+                        "cursor": {
+                            "type": "string",
+                            "description": "Pagination cursor from previous response"
                         },
                         "semantic": {
                             "type": "boolean",
@@ -304,6 +312,40 @@ async fn handle_tools_list() -> Result<Value> {
                 }
             },
             {
+                "name": "create_task",
+                "description": "Create a new task with metadata and dependencies",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "Task title"
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Optional tags for categorization"
+                        },
+                        "priority": {
+                            "type": "string",
+                            "enum": ["low", "medium", "high", "critical"],
+                            "default": "medium",
+                            "description": "Task priority"
+                        },
+                        "assignee": {
+                            "type": "string",
+                            "description": "Optional assignee"
+                        },
+                        "depends_on": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Task IDs this task depends on"
+                        }
+                    },
+                    "required": ["title"]
+                }
+            },
+            {
                 "name": "list_tasks",
                 "description": "List task cards filtered by status",
                 "inputSchema": {
@@ -317,6 +359,53 @@ async fn handle_tools_list() -> Result<Value> {
                         "assignee": {
                             "type": "string",
                             "description": "Filter by assignee name"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "get_task_dependencies",
+                "description": "Get dependencies for a task (or reverse dependencies)",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "description": "Task ID to query"
+                        },
+                        "reverse": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Get dependents instead of dependencies"
+                        }
+                    },
+                    "required": ["id"]
+                }
+            },
+            {
+                "name": "validate_task_graph",
+                "description": "Validate task dependency graph for circular dependencies",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "description": "Validate specific task only (optional)"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "query_graph",
+                "description": "Query the task dependency graph in various formats",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "format": {
+                            "type": "string",
+                            "enum": ["dot", "mermaid", "json"],
+                            "default": "json",
+                            "description": "Output format for the graph"
                         }
                     }
                 }
@@ -348,12 +437,13 @@ async fn handle_ping() -> Result<Value> {
     Ok(Value::String("pong".to_string()))
 }
 
-/// Read context handler - fuzzy search across project
+/// Read context handler - fuzzy search across project with pagination
 async fn handle_read_context(params: Option<Value>) -> Result<Value> {
     #[derive(Deserialize)]
     struct SearchParams {
         query: String,
         limit: Option<usize>,
+        cursor: Option<String>,
         #[serde(default)]
         semantic: bool,
         #[serde(default)]
@@ -385,10 +475,15 @@ async fn handle_read_context(params: Option<Value>) -> Result<Value> {
         "hybrid".to_string()
     };
 
+    // Clamp limit to max 50
+    let limit = params.limit.unwrap_or(10).min(50);
+
     tracing::info!(
-        "read_context: query='{}', mode='{}'",
+        "read_context: query='{}', mode='{}', limit={}, cursor={:?}",
         params.query,
-        mode_str
+        mode_str,
+        limit,
+        params.cursor
     );
 
     // Use CUE_WORKSPACE env var if set, otherwise use current directory
@@ -405,21 +500,20 @@ async fn handle_read_context(params: Option<Value>) -> Result<Value> {
         }
     });
 
-    // Use the new mode-aware search
+    // Use paginated search
     let search_mode = cue_core::context::SearchMode::parse(&mode_str);
-    let results = cue_core::context::search_workspace_with_mode(
+    let search_result = cue_core::context::search_workspace_paginated(
         &workspace,
         &params.query,
         search_mode,
         search_filters,
+        limit,
+        params.cursor.as_deref(),
     )?;
 
-    // Convert to simplified JSON response
-    let limit = params.limit.unwrap_or(10);
-
-    let json_results: Vec<Value> = results
+    // Convert to JSON response with pagination metadata
+    let json_results: Vec<Value> = search_result.docs
         .into_iter()
-        .take(limit)
         .map(|doc| {
             serde_json::json!({
                 "path": doc.path,
@@ -430,7 +524,12 @@ async fn handle_read_context(params: Option<Value>) -> Result<Value> {
         })
         .collect();
 
-    Ok(serde_json::Value::Array(json_results))
+    Ok(serde_json::json!({
+        "results": json_results,
+        "total_count": search_result.total_count,
+        "next_cursor": search_result.next_cursor,
+        "has_more": search_result.next_cursor.is_some()
+    }))
 }
 
 /// Read document handler - read file with optional anchor
@@ -502,25 +601,177 @@ async fn handle_create_task(params: Option<Value>) -> Result<Value> {
     #[derive(Deserialize)]
     struct CreateTaskParams {
         title: String,
+        tags: Option<Vec<String>>,
+        priority: Option<String>,
+        assignee: Option<String>,
+        depends_on: Option<Vec<String>>,
     }
 
-    let params: CreateTaskParams = params
-        .ok_or_else(|| CueError::ValidationError("Missing params".to_string()))
-        .and_then(|v| {
-            serde_json::from_value(v)
-                .map_err(|e| CueError::ValidationError(format!("Invalid params: {}", e)))
-        })?;
+    let params: CreateTaskParams = serde_json::from_value(params.unwrap_or_default())?;
 
-    // Use CUE_WORKSPACE env var if set, otherwise use current directory
     let workspace = std::env::var("CUE_WORKSPACE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
-    
-    let path = cue_core::tasks::create_task(&workspace, &params.title)?;
+
+    // Validate depends_on if provided
+    if let Some(deps) = &params.depends_on {
+        for dep_id in deps {
+            let dep_path = workspace.join(".cuedeck/cards").join(format!("{}.md", dep_id));
+            if !dep_path.exists() {
+                return Err(CueError::DependencyNotFound(dep_id.clone()));
+            }
+        }
+    }
+
+    let path = cue_core::tasks::create_task_with_metadata(
+        &workspace,
+        &params.title,
+        params.tags,
+        params.priority.as_deref(),
+        params.assignee.as_deref(),
+        params.depends_on,
+    )?;
 
     // Return the created task doc
     let doc = cue_core::parse_file(&path)?;
     serde_json::to_value(doc).map_err(CueError::JsonError)
+}
+
+/// Get task dependencies handler
+async fn handle_get_task_dependencies(params: Option<Value>) -> Result<Value> {
+    #[derive(Deserialize)]
+    struct GetDepsParams {
+        id: String,
+        #[serde(default)]
+        reverse: bool,
+    }
+
+    let params: GetDepsParams = serde_json::from_value(params.unwrap_or_default())?;
+    let workspace = std::env::var("CUE_WORKSPACE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+    if params.reverse {
+        // Get dependents
+        let dependents = cue_core::tasks::get_task_dependents(&workspace, &params.id)?;
+        let mut dep_details = Vec::new();
+        for dep in dependents {
+            let task_path = workspace.join(format!(".cuedeck/cards/{}.md", dep.from_id));
+            if let Ok(doc) = cue_core::parse_file(&task_path) {
+                dep_details.push(serde_json::json!({
+                    "id": dep.from_id,
+                    "title": doc.frontmatter.as_ref().map(|m| m.title.as_str()).unwrap_or("Untitled"),
+                    "status": doc.frontmatter.as_ref().map(|m| m.status.as_str()).unwrap_or("unknown"),
+                }));
+            }
+        }
+        Ok(serde_json::json!({
+            "task_id": params.id,
+            "type": "dependents",
+            "count": dep_details.len(),
+            "tasks": dep_details,
+        }))
+    } else {
+        // Get dependencies
+        let dependencies = cue_core::tasks::get_task_dependencies(&workspace, &params.id)?;
+        let mut dep_details = Vec::new();
+        for dep in dependencies {
+            let task_path = workspace.join(format!(".cuedeck/cards/{}.md", dep.to_id));
+            if let Ok(doc) = cue_core::parse_file(&task_path) {
+                dep_details.push(serde_json::json!({
+                    "id": dep.to_id,
+                    "title": doc.frontmatter.as_ref().map(|m| m.title.as_str()).unwrap_or("Untitled"),
+                    "status": doc.frontmatter.as_ref().map(|m| m.status.as_str()).unwrap_or("unknown"),
+                }));
+            }
+        }
+        Ok(serde_json::json!({
+            "task_id": params.id,
+            "type": "dependencies",
+            "count": dep_details.len(),
+            "tasks": dep_details,
+        }))
+    }
+}
+
+/// Validate task dependency graph handler
+async fn handle_validate_task_graph(params: Option<Value>) -> Result<Value> {
+    #[derive(Deserialize)]
+    struct ValidateParams {
+        id: Option<String>,
+    }
+
+    let params: ValidateParams = serde_json::from_value(params.unwrap_or_default())?;
+    let workspace = std::env::var("CUE_WORKSPACE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+    if let Some(task_id) = params.id {
+        let deps = cue_core::tasks::get_task_dependencies(&workspace, &task_id)?;
+        let dep_ids: Vec<String> = deps.into_iter().map(|d| d.to_id).collect();
+
+        match cue_core::tasks::validate_task_dependencies(&workspace, &task_id, &dep_ids) {
+            Ok(_) => Ok(serde_json::json!({
+                "valid": true,
+                "task_id": task_id,
+                "message": "Task dependencies are valid",
+            })),
+            Err(e) => Ok(serde_json::json!({
+                "valid": false,
+                "task_id": task_id,
+                "error": e.to_string(),
+            })),
+        }
+    } else {
+        use cue_core::task_graph::TaskGraph;
+        let graph = TaskGraph::from_workspace(&workspace)?;
+        match graph.validate_dependencies() {
+            Ok(_) => Ok(serde_json::json!({
+                "valid": true,
+                "message": "All task dependencies are valid (no circular dependencies)",
+            })),
+            Err(e) => Ok(serde_json::json!({
+                "valid": false,
+                "error": e.to_string(),
+            })),
+        }
+    }
+}
+
+/// Query graph handler - return task dependency graph
+async fn handle_query_graph(params: Option<Value>) -> Result<Value> {
+    #[derive(Deserialize)]
+    struct QueryGraphParams {
+        #[serde(default = "default_format")]
+        format: String,
+    }
+
+    fn default_format() -> String {
+        "json".to_string()
+    }
+
+    let params: QueryGraphParams = serde_json::from_value(params.unwrap_or_default())?;
+    let workspace = std::env::var("CUE_WORKSPACE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+    use cue_core::task_graph::TaskGraph;
+    let graph = TaskGraph::from_workspace(&workspace)?;
+
+    let output = match params.format.to_lowercase().as_str() {
+        "dot" => graph.to_dot(),
+        "mermaid" => graph.to_mermaid(),
+        "json" => graph.to_json()?,
+        _ => return Err(CueError::ValidationError(format!(
+            "Invalid format '{}'. Must be: dot, mermaid, or json",
+            params.format
+        ))),
+    };
+
+    Ok(serde_json::json!({
+        "format": params.format,
+        "graph": output,
+    }))
 }
 
 /// Update task handler - modify task frontmatter

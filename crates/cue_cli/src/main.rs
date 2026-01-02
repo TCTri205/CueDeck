@@ -128,7 +128,58 @@ enum Commands {
 #[derive(Subcommand)]
 enum CardAction {
     /// Create a new card
-    New { title: String },
+    New {
+        title: String,
+    },
+
+    /// Create a new card with metadata
+    Create {
+        /// Task title
+        title: String,
+
+        /// Tags (comma-separated)
+        #[arg(short, long, value_delimiter = ',')]
+        tags: Option<Vec<String>>,
+
+        /// Priority: low, medium, high, critical
+        #[arg(short, long, default_value = "medium")]
+        priority: String,
+
+        /// Assignee
+        #[arg(short, long)]
+        assignee: Option<String>,
+
+        /// Task IDs this depends on (comma-separated)
+        #[arg(short, long, value_delimiter = ',')]
+        depends_on: Option<Vec<String>>,
+    },
+
+    /// Show task dependencies
+    Deps {
+        /// Task ID to query
+        id: String,
+
+        /// Show dependents instead of dependencies
+        #[arg(short, long)]
+        reverse: bool,
+    },
+
+    /// Validate task dependency graph
+    Validate {
+        /// Validate specific task only
+        id: Option<String>,
+    },
+
+    /// Visualize task dependency graph
+    Graph {
+        /// Output format: dot, mermaid, json
+        #[arg(short, long, default_value = "mermaid")]
+        format: String,
+
+        /// Output file path (optional)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
 
     /// List all cards
     List {
@@ -418,127 +469,171 @@ async fn cmd_open(
     Ok(())
 }
 
-async fn cmd_doctor(_repair: bool, json: bool) -> anyhow::Result<()> {
-    use std::fs;
+async fn cmd_doctor(repair: bool, json: bool) -> anyhow::Result<()> {
+    use cue_core::doctor::{run_diagnostics, run_repairs, CheckStatus};
 
-    eprintln!("✓ Running workspace health checks...\n");
+    let cwd = std::env::current_dir()?;
 
-    let mut issues: Vec<String> = Vec::new();
-
-    // Check 1: Config syntax
-    let config_path = Path::new(".cuedeck/config.toml");
-    if config_path.exists() {
-        match fs::read_to_string(config_path) {
-            Ok(content) => {
-                if toml::from_str::<toml::Value>(&content).is_err() {
-                    issues.push("Invalid TOML syntax in config.toml".to_string());
-                } else {
-                    eprintln!("  [OK] Config syntax");
-                }
-            }
-            Err(_) => {
-                issues.push("Cannot read config.toml".to_string());
-            }
-        }
-    } else {
-        issues.push("Missing .cuedeck/config.toml".to_string());
+    if !json {
+        eprintln!("🔍 Running workspace health checks...\n");
     }
 
-    // Check 2: Workspace structure
-    if !Path::new(".cuedeck").exists() {
-        issues.push("Missing .cuedeck/ directory".to_string());
-    } else {
-        eprintln!("  [OK] Workspace structure");
+    let report = run_diagnostics(&cwd)?;
+
+    if json && !repair {
+        // JSON output without repair
+        let json_str = serde_json::to_string_pretty(&report)?;
+        println!("{}", json_str);
+        return Ok(());
     }
 
-    // Check 3: Parse all cards for YAML frontmatter
-    let cards_dir = Path::new(".cuedeck/cards");
-    let mut frontmatter_errors = 0;
-    if cards_dir.exists() {
-        // Move regex compilation outside the loop
-        let frontmatter_regex = regex::Regex::new(r"(?ms)^---\r?\n(.*?)\r?\n---").unwrap();
-        
-        for entry in walkdir::WalkDir::new(cards_dir).into_iter().flatten() {
-            if entry.file_type().is_file() && entry.path().extension().is_some_and(|e| e == "md") {
-                if let Ok(content) = fs::read_to_string(entry.path()) {
-                    if content.starts_with("---") {
-                        // Extract frontmatter section
-                        if let Some(captures) = frontmatter_regex.captures(&content) {
-                            let yaml_str = captures.get(1).unwrap().as_str();
+    // Human-readable output
+    if !json {
+        for check in &report.checks {
+            let icon = match check.status {
+                CheckStatus::Pass => "✓",
+                CheckStatus::Warn => "⚠",
+                CheckStatus::Fail => "✗",
+            };
 
-                            // Validate YAML syntax and structure
-                            match serde_yaml::from_str::<cue_common::CardMetadata>(yaml_str) {
-                                Ok(_) => {
-                                    // Valid frontmatter
-                                }
-                                Err(e) => {
-                                    issues.push(format!(
-                                        "Invalid frontmatter in {:?}: {}",
-                                        entry.path(),
-                                        e
-                                    ));
-                                    frontmatter_errors += 1;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        if frontmatter_errors == 0 {
-            eprintln!("  [OK] Card frontmatter");
-        }
-    }
-
-    // Check 4: Detect cycles using real graph logic
-    let mut all_docs = Vec::new();
-    if cards_dir.exists() {
-        for entry in walkdir::WalkDir::new(cards_dir).into_iter().flatten() {
-            if entry.file_type().is_file() && entry.path().extension().is_some_and(|e| e == "md") {
-                if let Ok(doc) = cue_core::parse_file(entry.path()) {
-                    all_docs.push(doc);
-                }
-            }
-        }
-    }
-
-    // Build graph and check for cycles
-    match cue_core::graph::DependencyGraph::build(&all_docs) {
-        Ok(graph) => {
-            if let Some(cycle_path) = graph.detect_cycle() {
-                let cycle_str: Vec<String> = cycle_path
-                    .iter()
-                    .map(|p| {
-                        p.file_name()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .to_string()
-                    })
-                    .collect();
-                issues.push(format!("Circular dependency: {}", cycle_str.join(" → ")));
+            let fixable_hint = if check.fixable && check.status != CheckStatus::Pass {
+                " [fixable]"
             } else {
-                eprintln!("  [OK] No circular dependencies");
+                ""
+            };
+
+            eprintln!("  {} {}: {}{}", icon, check.name, check.message, fixable_hint);
+
+            if let Some(details) = &check.details {
+                for detail in details.iter().take(5) {
+                    eprintln!("      {}", detail);
+                }
+                if details.len() > 5 {
+                    eprintln!("      ... and {} more", details.len() - 5);
+                }
             }
         }
-        Err(e) => {
-            eprintln!("  [WARN] Could not build graph: {}", e);
+
+        // Print stats
+        if let Some(stats) = &report.stats {
+            eprintln!("\n📊 Workspace Statistics:");
+            eprintln!("  Total tasks: {}", stats.total_tasks);
+            eprintln!("  Total dependencies: {}", stats.total_deps);
+            eprintln!("  Orphaned tasks: {}", stats.orphaned_tasks);
+            eprintln!("  Max dependency depth: {}", stats.max_depth);
         }
     }
 
-    if issues.is_empty() {
-        eprintln!("\n✅ All checks passed!");
-        Ok(())
-    } else {
+    // Attempt repairs if requested
+    if repair && !report.healthy {
+        if !json {
+            eprintln!("\n🔧 Attempting automatic repairs...\n");
+        }
+
+        let repair_report = run_repairs(&cwd, &report)?;
+
+        // Display repair results
+        if !json {
+            for result in &repair_report.details {
+                let icon = if result.success { "✓" } else { "✗" };
+                eprintln!("  {} {}: {}", icon, result.check_name, result.message);
+            }
+
+            eprintln!("\n📋 Repair Summary:");
+            eprintln!("  Attempted: {}", repair_report.total_attempted);
+            eprintln!("  Successful: {}", repair_report.successful);
+            eprintln!("  Failed: {}", repair_report.failed);
+        }
+
+        // Re-run diagnostics to verify repairs
+        if !json {
+            eprintln!("\n🔍 Re-running diagnostics to verify repairs...\n");
+        }
+
+        let final_report = run_diagnostics(&cwd)?;
+
         if json {
-            println!(r#"{{"ok":false,"issues":{:#?}}}"#, issues);
+            // JSON output with repair results
+            use serde_json::json;
+            let output = json!({
+                "initial_diagnostics": report,
+                "repairs": repair_report,
+                "final_diagnostics": final_report,
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
-            eprintln!("\n❌ Found {} issue(s):", issues.len());
-            for issue in &issues {
-                eprintln!("  - {}", issue);
+            // Show final status
+            for check in &final_report.checks {
+                let icon = match check.status {
+                    CheckStatus::Pass => "✓",
+                    CheckStatus::Warn => "⚠",
+                    CheckStatus::Fail => "✗",
+                };
+                eprintln!("  {} {}: {}", icon, check.name, check.message);
+            }
+
+            eprintln!();
+            if final_report.healthy {
+                eprintln!("✅ All issues resolved!");
+            } else {
+                let failed = final_report
+                    .checks
+                    .iter()
+                    .filter(|c| c.status == CheckStatus::Fail)
+                    .count();
+                let warned = final_report
+                    .checks
+                    .iter()
+                    .filter(|c| c.status == CheckStatus::Warn)
+                    .count();
+
+                eprintln!("⚠️  Some issues remain:");
+                if failed > 0 {
+                    eprintln!("  {} issue(s) need manual attention", failed);
+                }
+                if warned > 0 {
+                    eprintln!("  {} warning(s)", warned);
+                }
             }
         }
-        std::process::exit(EXIT_ERROR);
+    } else if !json {
+        // No repair, just show summary
+        eprintln!();
+        if report.healthy {
+            eprintln!("✅ All checks passed!");
+        } else {
+            let failed = report
+                .checks
+                .iter()
+                .filter(|c| c.status == CheckStatus::Fail)
+                .count();
+            let warned = report
+                .checks
+                .iter()
+                .filter(|c| c.status == CheckStatus::Warn)
+                .count();
+            let fixable = report
+                .checks
+                .iter()
+                .filter(|c| c.fixable && c.status != CheckStatus::Pass)
+                .count();
+
+            eprintln!("❌ Health check failed:");
+            if failed > 0 {
+                eprintln!("  {} issue(s) need attention", failed);
+            }
+            if warned > 0 {
+                eprintln!("  {} warning(s)", warned);
+            }
+            if fixable > 0 {
+                eprintln!("\n💡 Tip: Run with --repair to automatically fix {} issue(s)", fixable);
+            }
+
+            std::process::exit(EXIT_ERROR);
+        }
     }
+
+    Ok(())
 }
 
 async fn cmd_card(action: CardAction) -> anyhow::Result<()> {
@@ -547,6 +642,170 @@ async fn cmd_card(action: CardAction) -> anyhow::Result<()> {
             let cwd = std::env::current_dir()?;
             let path = cue_core::tasks::create_task(&cwd, &title)?;
             eprintln!("✓ Created {}", path.display());
+        }
+
+        CardAction::Create {
+            title,
+            tags,
+            priority,
+            assignee,
+            depends_on,
+        } => {
+            let cwd = std::env::current_dir()?;
+
+            // Validate priority
+            if !["low", "medium", "high", "critical"].contains(&priority.as_str()) {
+                anyhow::bail!(
+                    "Invalid priority '{}'. Must be: low, medium, high, or critical",
+                    priority
+                );
+            }
+
+            let path = cue_core::tasks::create_task_with_metadata(
+                &cwd,
+                &title,
+                tags.clone(),
+                Some(&priority),
+                assignee.as_deref(),
+                depends_on.clone(),
+            )?;
+
+            let task_id = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown");
+
+            eprintln!("✓ Created task: {} at {}", task_id, path.display());
+
+            // Show metadata summary
+            if let Some(t) = tags {
+                eprintln!("  Tags: {}", t.join(", "));
+            }
+            eprintln!("  Priority: {}", priority);
+            if let Some(a) = assignee {
+                eprintln!("  Assignee: {}", a);
+            }
+            if let Some(deps) = depends_on {
+                if !deps.is_empty() {
+                    eprintln!("  Depends on: {}", deps.join(", "));
+                }
+            }
+        }
+
+        CardAction::Deps { id, reverse } => {
+            let cwd = std::env::current_dir()?;
+
+            if reverse {
+                // Show dependents (tasks that depend on this task)
+                let dependents = cue_core::tasks::get_task_dependents(&cwd, &id)?;
+
+                if dependents.is_empty() {
+                    eprintln!("No tasks depend on '{}'", id);
+                } else {
+                    eprintln!("Tasks depending on '{}' ({} total):", id, dependents.len());
+                    for dep in dependents {
+                        // Load task details
+                        let task_path = cwd.join(format!(".cuedeck/cards/{}.md", dep.from_id));
+                        if let Ok(doc) = cue_core::parse_file(&task_path) {
+                            let title = doc
+                                .frontmatter
+                                .as_ref()
+                                .map(|m| m.title.as_str())
+                                .unwrap_or("Untitled");
+                            eprintln!("  ← {}: {}", dep.from_id, title);
+                        } else {
+                            eprintln!("  ← {}", dep.from_id);
+                        }
+                    }
+                }
+            } else {
+                // Show dependencies (tasks this task depends on)
+                let dependencies = cue_core::tasks::get_task_dependencies(&cwd, &id)?;
+
+                if dependencies.is_empty() {
+                    eprintln!("Task '{}' has no dependencies", id);
+                } else {
+                    eprintln!(
+                        "Dependencies for '{}' ({} total):",
+                        id,
+                        dependencies.len()
+                    );
+                    for dep in dependencies {
+                        // Load task details
+                        let task_path = cwd.join(format!(".cuedeck/cards/{}.md", dep.to_id));
+                        if let Ok(doc) = cue_core::parse_file(&task_path) {
+                            let title = doc
+                                .frontmatter
+                                .as_ref()
+                                .map(|m| m.title.as_str())
+                                .unwrap_or("Untitled");
+                            eprintln!("  → {}: {}", dep.to_id, title);
+                        } else {
+                            eprintln!("  → {}", dep.to_id);
+                        }
+                    }
+                }
+            }
+        }
+
+        CardAction::Validate { id } => {
+            use cue_core::task_graph::TaskGraph;
+            let cwd = std::env::current_dir()?;
+
+            if let Some(task_id) = id {
+                // Validate specific task
+                eprintln!("Validating task '{}'...", task_id);
+
+                // Get dependencies for this task
+                let deps = cue_core::tasks::get_task_dependencies(&cwd, &task_id)?;
+                let dep_ids: Vec<String> = deps.into_iter().map(|d| d.to_id).collect();
+
+                match cue_core::tasks::validate_task_dependencies(&cwd, &task_id, &dep_ids) {
+                    Ok(_) => eprintln!("✓ Task '{}' dependencies are valid", task_id),
+                    Err(e) => {
+                        eprintln!("❌ Validation failed: {}", e);
+                        std::process::exit(EXIT_ERROR);
+                    }
+                }
+            } else {
+                // Validate entire task graph
+                eprintln!("Validating entire task dependency graph...");
+
+                let graph = TaskGraph::from_workspace(&cwd)?;
+                match graph.validate_dependencies() {
+                    Ok(_) => eprintln!("✓ All task dependencies are valid (no circular dependencies)"),
+                    Err(e) => {
+                        eprintln!("❌ Validation failed: {}", e);
+                        std::process::exit(EXIT_ERROR);
+                    }
+                }
+            }
+        }
+
+        CardAction::Graph { format, output } => {
+            use cue_core::task_graph::TaskGraph;
+            use std::fs;
+            let cwd = std::env::current_dir()?;
+
+            eprintln!("Building task dependency graph...");
+            let graph = TaskGraph::from_workspace(&cwd)?;
+
+            let rendered = match format.to_lowercase().as_str() {
+                "dot" => graph.to_dot(),
+                "mermaid" => graph.to_mermaid(),
+                "json" => graph.to_json()?,
+                _ => anyhow::bail!(
+                    "Invalid format '{}'. Must be: dot, mermaid, or json",
+                    format
+                ),
+            };
+
+            if let Some(output_path) = output {
+                fs::write(&output_path, &rendered)?;
+                eprintln!("✓ Task graph written to {}", output_path);
+            } else {
+                println!("{}", rendered);
+            }
         }
 
         CardAction::List { status } => {
@@ -615,6 +874,7 @@ async fn cmd_list(status: String) -> anyhow::Result<()> {
             priority: "medium".to_string(),
             tags: None,
             created: None,
+            depends_on: None,
         });
 
         eprintln!(
