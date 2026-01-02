@@ -261,6 +261,25 @@ async fn handle_tools_list() -> Result<Value> {
                             "type": "boolean",
                             "description": "Use semantic search with embeddings",
                             "default": false
+                        },
+                        "filters": {
+                            "type": "object",
+                            "description": "Optional filters for results",
+                            "properties": {
+                                "tags": {
+                                    "type": "array",
+                                    "items": { "type": "string" },
+                                    "description": "Filter by tags (ANY match)"
+                                },
+                                "priority": {
+                                    "type": "string",
+                                    "description": "Filter by priority (exact match)"
+                                },
+                                "assignee": {
+                                    "type": "string",
+                                    "description": "Filter by assignee (exact match)"
+                                }
+                            }
                         }
                     },
                     "required": ["query"]
@@ -339,6 +358,15 @@ async fn handle_read_context(params: Option<Value>) -> Result<Value> {
         semantic: bool,
         #[serde(default)]
         mode: Option<String>,
+        #[serde(default)]
+        filters: Option<FilterParams>,
+    }
+
+    #[derive(Deserialize)]
+    struct FilterParams {
+        tags: Option<Vec<String>>,
+        priority: Option<String>,
+        assignee: Option<String>,
     }
 
     let params: SearchParams = params
@@ -368,13 +396,22 @@ async fn handle_read_context(params: Option<Value>) -> Result<Value> {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
 
+    // Convert MCP filters to core SearchFilters
+    let search_filters = params.filters.map(|f| {
+        cue_core::context::SearchFilters {
+            tags: f.tags,
+            priority: f.priority,
+            assignee: f.assignee,
+        }
+    });
+
     // Use the new mode-aware search
     let search_mode = cue_core::context::SearchMode::parse(&mode_str);
     let results = cue_core::context::search_workspace_with_mode(
         &workspace,
         &params.query,
         search_mode,
-        None,
+        search_filters,
     )?;
 
     // Convert to simplified JSON response

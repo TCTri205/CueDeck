@@ -1,0 +1,28 @@
+# CueDeck Configuration
+# See: https://docs.cuedeck.dev/config
+
+[core]
+token_limit = 32000
+hash_algo = "sha256"
+
+[parser]
+ignore_patterns = ["target/", "node_modules/", ".git/"]
+anchor_levels = [1, 2, 3]
+
+[security]
+secret_patterns = ["sk-.*", "ghp_.*"]
+
+[mcp]
+search_limit = 10
+
+[author]
+name = ""
+email = ""
+
+[watcher]
+enabled = true
+debounce_ms = 500
+
+[cache]
+cache_mode = "lazy"
+memory_limit_mb = 512

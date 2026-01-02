@@ -47,12 +47,16 @@ Launches the interactive file selector with configurable search mode.
 
 - **Arguments**:
   - `QUERY`: Optional initial search filter.
+    - **Tip**: To start a search with filters but no query, simple omit the query: `cue open --tags auth` or use empty quotes `cue open "" --tags auth`.
 
 - **Flags**:
   - `--mode=<MODE>`: Search mode selection (default: `hybrid`)
     - `keyword`: Fast exact/fuzzy text matching (~50ms)
     - `semantic`: AI-powered conceptual search (~2-5s first run, ~200ms cached)
     - `hybrid`: **Default** - Combines both with 70/30 weighting (~250ms cached)
+  - `--tags <TAGS>`: Filter by tags (comma-separated, e.g., "auth,api"). ANY match logic.
+  - `--priority <PRIORITY>`: Filter by priority (e.g., "high", "medium", "low"). Case-insensitive.
+  - `--assignee <ASSIGNEE>`: Filter by assignee (e.g., "@tctri"). Case-insensitive.
   - `--semantic`: **Deprecated** - Use `--mode=semantic` instead (kept for backward compatibility)
 
 - **Search Behavior**:
@@ -81,6 +85,15 @@ Launches the interactive file selector with configurable search mode.
   # Hybrid (default, best relevance)
   cue open "login flow"
   cue open "error handling" --mode=hybrid  # Explicit
+  
+  # Filter by tags
+  cue open "authentication" --tags auth,security
+
+  # Filter by priority
+  cue open database --priority high
+
+  # Combined filters
+  cue open api --tags backend --priority high --assignee @dev
   
   # Legacy syntax (still supported)
   cue open "auth" --semantic

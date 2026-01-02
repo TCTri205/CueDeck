@@ -49,6 +49,18 @@ enum Commands {
         /// Use semantic search (deprecated, use --mode=semantic)
         #[arg(long)]
         semantic: bool,
+
+        /// Filter by tags (comma-separated, e.g., "auth,api")
+        #[arg(long, value_delimiter = ',')]
+        tags: Option<Vec<String>>,
+
+        /// Filter by priority (e.g., "high", "medium", "low")
+        #[arg(long)]
+        priority: Option<String>,
+
+        /// Filter by assignee (e.g., "@tctri")
+        #[arg(long)]
+        assignee: Option<String>,
     },
 
     /// Watch for file changes and auto-regenerate scene
@@ -154,7 +166,14 @@ async fn main() {
             dry_run,
             token_limit,
         } => cmd_scene(dry_run, token_limit).await,
-        Commands::Open { query, mode, semantic } => cmd_open(query, mode, semantic).await,
+        Commands::Open {
+            query,
+            mode,
+            semantic,
+            tags,
+            priority,
+            assignee,
+        } => cmd_open(query, mode, semantic, tags, priority, assignee).await,
 
         Commands::Watch => cmd_watch().await,
 
@@ -312,8 +331,15 @@ async fn cmd_scene(dry_run: bool, _token_limit: Option<usize>) -> anyhow::Result
     Ok(())
 }
 
-async fn cmd_open(query: Option<String>, mode: String, semantic: bool) -> anyhow::Result<()> {
-    use cue_core::context::{search_workspace_with_mode, SearchMode};
+async fn cmd_open(
+    query: Option<String>,
+    mode: String,
+    semantic: bool,
+    tags: Option<Vec<String>>,
+    priority: Option<String>,
+    assignee: Option<String>,
+) -> anyhow::Result<()> {
+    use cue_core::context::{search_workspace_with_mode, SearchFilters, SearchMode};
     use std::io::{self, Write};
 
     let cwd = std::env::current_dir()?;
@@ -326,13 +352,37 @@ async fn cmd_open(query: Option<String>, mode: String, semantic: bool) -> anyhow
         SearchMode::parse(&mode)
     };
 
+    // Construct filters if any provided
+    let filters = if tags.is_some() || priority.is_some() || assignee.is_some() {
+        Some(SearchFilters {
+            tags,
+            priority,
+            assignee,
+        })
+    } else {
+        None
+    };
+
+    // Log active filters to stderr
+    if let Some(ref f) = filters {
+        if let Some(ref t) = f.tags {
+            eprintln!("🏷️  Filtering by tags: {}", t.join(", "));
+        }
+        if let Some(ref p) = f.priority {
+            eprintln!("⚡ Filtering by priority: {}", p);
+        }
+        if let Some(ref a) = f.assignee {
+            eprintln!("👤 Filtering by assignee: {}", a);
+        }
+    }
+
     match search_mode {
         SearchMode::Hybrid => eprintln!("🔍 Using hybrid search (semantic + keyword)..."),
         SearchMode::Semantic => eprintln!("🔍 Using semantic search..."),
         SearchMode::Keyword => eprintln!("🔍 Using keyword search..."),
     }
 
-    let docs = search_workspace_with_mode(&cwd, &query_str, search_mode, None)?;
+    let docs = search_workspace_with_mode(&cwd, &query_str, search_mode, filters)?;
 
     if docs.is_empty() {
         eprintln!("No results found for query: '{}'", query_str);
@@ -563,6 +613,7 @@ async fn cmd_list(status: String) -> anyhow::Result<()> {
             status: "unknown".to_string(),
             assignee: None,
             priority: "medium".to_string(),
+            tags: None,
             created: None,
         });
 

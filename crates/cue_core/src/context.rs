@@ -69,9 +69,52 @@ impl Default for HybridSearchConfig {
 #[derive(Debug, Clone, Default)]
 pub struct SearchFilters {
     /// Filter by tags (if document frontmatter has matching tags)
+    /// Match if document has ANY of these tags
     pub tags: Option<Vec<String>>,
-    /// Filter by priority
+    /// Filter by priority (exact match)
     pub priority: Option<String>,
+    /// Filter by assignee (exact match)
+    pub assignee: Option<String>,
+}
+
+impl SearchFilters {
+    pub fn matches(&self, doc: &Document) -> bool {
+        let meta = match &doc.frontmatter {
+            Some(m) => m,
+            None => return false,
+        };
+
+        // Filter by tags (ANY match)
+        if let Some(ref filter_tags) = self.tags {
+            let doc_tags = match &meta.tags {
+                Some(t) => t,
+                None => return false,
+            };
+            // Case-insensitive check
+            if !filter_tags.iter().any(|ft| {
+                doc_tags.iter().any(|dt| dt.eq_ignore_ascii_case(ft))
+            }) {
+                return false;
+            }
+        }
+
+        // Filter by priority (exact match, case-insensitive)
+        if let Some(ref filter_priority) = self.priority {
+            if !meta.priority.eq_ignore_ascii_case(filter_priority) {
+                return false;
+            }
+        }
+
+        // Filter by assignee (exact match, case-insensitive)
+        if let Some(ref filter_assignee) = self.assignee {
+            match &meta.assignee {
+                Some(a) if a.eq_ignore_ascii_case(filter_assignee) => {},
+                _ => return false,
+            }
+        }
+
+        true
+    }
 }
 
 /// Main search function with mode selection
@@ -90,9 +133,9 @@ pub fn search_workspace_with_mode(
     );
 
     match mode {
-        SearchMode::Keyword => search_workspace_keyword(root, query),
-        SearchMode::Semantic => search_workspace_semantic(root, query, 10),
-        SearchMode::Hybrid => search_workspace_hybrid(root, query),
+        SearchMode::Keyword => search_workspace_keyword(root, query, _filters.as_ref()),
+        SearchMode::Semantic => search_workspace_semantic(root, query, 10, _filters.as_ref()),
+        SearchMode::Hybrid => search_workspace_hybrid(root, query, _filters.as_ref()),
     }
 }
 
@@ -108,7 +151,7 @@ pub fn search_workspace(root: &Path, query: &str, semantic: bool) -> Result<Vec<
 }
 
 /// Keyword-based search (original implementation)
-fn search_workspace_keyword(root: &Path, query: &str) -> Result<Vec<Document>> {
+fn search_workspace_keyword(root: &Path, query: &str, filters: Option<&SearchFilters>) -> Result<Vec<Document>> {
     let query_lower = query.to_lowercase();
     let query_tokens: Vec<&str> = query_lower.split_whitespace().collect();
 
@@ -145,13 +188,21 @@ fn search_workspace_keyword(root: &Path, query: &str) -> Result<Vec<Document>> {
     results.sort_by(|a, b| b.1.cmp(&a.1));
 
     // Return top 10
-    let top_docs = results.into_iter().take(10).map(|(doc, _)| doc).collect();
+    // Filter and Return top 10
+    let top_docs = results
+        .into_iter()
+        .filter(|(doc, _)| {
+            filters.map_or(true, |f| f.matches(doc))
+        })
+        .take(10)
+        .map(|(doc, _)| doc)
+        .collect();
 
     Ok(top_docs)
 }
 
 /// Semantic search using vector embeddings
-fn search_workspace_semantic(root: &Path, query: &str, limit: usize) -> Result<Vec<Document>> {
+fn search_workspace_semantic(root: &Path, query: &str, limit: usize, filters: Option<&SearchFilters>) -> Result<Vec<Document>> {
     use rayon::prelude::*;
 
     tracing::info!("Performing semantic search for: '{}'", query);
@@ -221,8 +272,12 @@ fn search_workspace_semantic(root: &Path, query: &str, limit: usize) -> Result<V
     sorted_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     // Return top N
+    // Return top N
     Ok(sorted_candidates
         .into_iter()
+        .filter(|(doc, _)| {
+            filters.map_or(true, |f| f.matches(doc))
+        })
         .take(limit)
         .map(|(doc, _)| doc)
         .collect())
@@ -237,7 +292,7 @@ fn normalize_keyword_score(raw_score: i32, max_score: i32) -> f32 {
 }
 
 /// Hybrid search: combines keyword and semantic search with weighted scoring
-fn search_workspace_hybrid(root: &Path, query: &str) -> Result<Vec<Document>> {
+fn search_workspace_hybrid(root: &Path, query: &str, filters: Option<&SearchFilters>) -> Result<Vec<Document>> {
     use rayon::prelude::*;
 
     tracing::info!("Performing hybrid search for: '{}'", query);
@@ -323,7 +378,15 @@ fn search_workspace_hybrid(root: &Path, query: &str) -> Result<Vec<Document>> {
     );
 
     // Return top 10
-    Ok(scored.into_iter().take(10).map(|(doc, _)| doc).collect())
+    // Return top 10
+    Ok(scored
+        .into_iter()
+        .filter(|(doc, _)| {
+            filters.map_or(true, |f| f.matches(doc))
+        })
+        .take(10)
+        .map(|(doc, _)| doc)
+        .collect())
 }
 
 /// Save the global embedding cache to disk

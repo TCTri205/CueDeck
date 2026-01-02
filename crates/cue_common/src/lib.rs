@@ -71,6 +71,10 @@ pub struct CardMetadata {
     #[serde(default = "default_priority")]
     pub priority: String,
 
+    /// Tags/Labels
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
+
     /// Creation timestamp (ISO 8601)
     #[serde(default)]
     pub created: Option<String>,

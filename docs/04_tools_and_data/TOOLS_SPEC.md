@@ -32,10 +32,26 @@
       "default": "hybrid",
       "description": "Search algorithm selection"
     },
-    "semantic": {
-      "type": "boolean",
       "default": false,
       "description": "DEPRECATED: Use mode='semantic' instead. Kept for backward compatibility."
+    },
+    "filters": {
+      "type": "object",
+      "properties": {
+        "tags": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "Filter by tags (ANY match logic)" 
+        },
+        "priority": { 
+          "type": "string",
+          "description": "Filter by priority (case-insensitive)" 
+        },
+        "assignee": { 
+          "type": "string", 
+          "description": "Filter by assignee (case-insensitive)" 
+        }
+      }
     }
   },
   "required": ["query"]
@@ -128,13 +144,16 @@
   }
 }
 
-// Legacy semantic syntax (still supported)
+// Filtered search
 {
   "jsonrpc": "2.0",
   "method": "read_context",
   "params": {
-    "query": "error handling",
-    "semantic": true
+    "query": "authentication",
+    "filters": {
+      "tags": ["auth", "security"],
+      "priority": "high"
+    }
   }
 }
 ```
