@@ -41,6 +41,10 @@ pub struct Config {
     #[serde(default)]
     pub cache: CacheConfig,
 
+    /// Search settings (Phase 5: Hybrid Search)
+    #[serde(default)]
+    pub search: SearchConfig,
+
     // Keep old budgets field for backward compatibility
     #[serde(default, skip_serializing)]
     pub budgets: TokenBudgets,
@@ -219,6 +223,50 @@ impl Default for CacheConfig {
     }
 }
 
+/// Search configuration ([search]) - Phase 5: Hybrid Search
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchConfig {
+    /// Weight for semantic search (0.0-1.0), default 0.7
+    #[serde(default = "default_semantic_weight")]
+    pub semantic_weight: f32,
+
+    /// Weight for keyword search (0.0-1.0), default 0.3
+    #[serde(default = "default_keyword_weight")]
+    pub keyword_weight: f32,
+
+    /// Maximum entries in embedding cache (LRU eviction)
+    #[serde(default = "default_embedding_cache_max")]
+    pub embedding_cache_max_entries: usize,
+
+    /// Default search mode: "hybrid", "keyword", or "semantic"
+    #[serde(default = "default_search_mode")]
+    pub default_mode: String,
+}
+
+fn default_semantic_weight() -> f32 {
+    0.7
+}
+fn default_keyword_weight() -> f32 {
+    0.3
+}
+fn default_embedding_cache_max() -> usize {
+    1000
+}
+fn default_search_mode() -> String {
+    "hybrid".to_string()
+}
+
+impl Default for SearchConfig {
+    fn default() -> Self {
+        Self {
+            semantic_weight: default_semantic_weight(),
+            keyword_weight: default_keyword_weight(),
+            embedding_cache_max_entries: default_embedding_cache_max(),
+            default_mode: default_search_mode(),
+        }
+    }
+}
+
 /// Token budget configuration (legacy, for backward compatibility)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenBudgets {
@@ -268,6 +316,7 @@ impl Config {
                 author: AuthorConfig::default(),
                 watcher: WatcherConfig::default(),
                 cache: CacheConfig::default(),
+                search: SearchConfig::default(),
                 budgets: TokenBudgets::default(),
             });
         }

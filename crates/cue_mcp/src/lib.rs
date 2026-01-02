@@ -337,6 +337,8 @@ async fn handle_read_context(params: Option<Value>) -> Result<Value> {
         limit: Option<usize>,
         #[serde(default)]
         semantic: bool,
+        #[serde(default)]
+        mode: Option<String>,
     }
 
     let params: SearchParams = params
@@ -346,18 +348,34 @@ async fn handle_read_context(params: Option<Value>) -> Result<Value> {
                 .map_err(|e| CueError::ValidationError(format!("Invalid params: {}", e)))
         })?;
 
+    // Determine search mode: explicit mode > semantic flag > default hybrid
+    let mode_str = if let Some(ref m) = params.mode {
+        m.clone()
+    } else if params.semantic {
+        "semantic".to_string()
+    } else {
+        "hybrid".to_string()
+    };
+
     tracing::info!(
-        "read_context: query='{}', semantic={}",
+        "read_context: query='{}', mode='{}'",
         params.query,
-        params.semantic
+        mode_str
     );
 
     // Use CUE_WORKSPACE env var if set, otherwise use current directory
     let workspace = std::env::var("CUE_WORKSPACE")
-        .map(|p| std::path::PathBuf::from(p))
+        .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
-    
-    let results = cue_core::context::search_workspace(&workspace, &params.query, params.semantic)?;
+
+    // Use the new mode-aware search
+    let search_mode = cue_core::context::SearchMode::parse(&mode_str);
+    let results = cue_core::context::search_workspace_with_mode(
+        &workspace,
+        &params.query,
+        search_mode,
+        None,
+    )?;
 
     // Convert to simplified JSON response
     let limit = params.limit.unwrap_or(10);
@@ -403,7 +421,7 @@ async fn handle_read_doc(params: Option<Value>) -> Result<Value> {
 
     // Use CUE_WORKSPACE env var if set, otherwise use current directory
     let workspace = std::env::var("CUE_WORKSPACE")
-        .map(|p| std::path::PathBuf::from(p))
+        .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
     
     let file_path = workspace.join(&params.path);
@@ -433,7 +451,7 @@ async fn handle_list_tasks(params: Option<Value>) -> Result<Value> {
 
     // Use CUE_WORKSPACE env var if set, otherwise use current directory
     let workspace = std::env::var("CUE_WORKSPACE")
-        .map(|p| std::path::PathBuf::from(p))
+        .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
     
     let tasks =
@@ -458,7 +476,7 @@ async fn handle_create_task(params: Option<Value>) -> Result<Value> {
 
     // Use CUE_WORKSPACE env var if set, otherwise use current directory
     let workspace = std::env::var("CUE_WORKSPACE")
-        .map(|p| std::path::PathBuf::from(p))
+        .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
     
     let path = cue_core::tasks::create_task(&workspace, &params.title)?;
@@ -492,7 +510,7 @@ async fn handle_update_task(params: Option<Value>) -> Result<Value> {
 
     // Use CUE_WORKSPACE env var if set, otherwise use current directory
     let workspace = std::env::var("CUE_WORKSPACE")
-        .map(|p| std::path::PathBuf::from(p))
+        .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
     
     let doc = cue_core::tasks::update_task(&workspace, &params.id, params.updates)?;
@@ -514,6 +532,8 @@ mod tests {
         };
 
         let resp = handle_request(req).await;
-        assert!(resp.result.is_some());
+        assert!(resp.is_some());
+        let response = resp.unwrap();
+        assert!(response.result.is_some());
     }
 }

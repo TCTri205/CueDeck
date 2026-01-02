@@ -4,8 +4,10 @@
 
 ### 1. `read_context`
 
-- **Description**: Smart fuzzy search across the project context headers and filenames.
-- **Complexity**: O(n log n) where n = total indexed headers
+- **Description**: Smart fuzzy/semantic search across project context headers and filenames with optional mode selection.
+- **Complexity**:
+  - Keyword: O(n log n) where n = total indexed headers
+  - Semantic/Hybrid: O(n × d) where d = embedding dimension (384)
 - **Input Schema**:
 
 ```json
@@ -23,11 +25,34 @@
       "default": 5,
       "minimum": 1,
       "maximum": 50
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["keyword", "semantic", "hybrid"],
+      "default": "hybrid",
+      "description": "Search algorithm selection"
+    },
+    "semantic": {
+      "type": "boolean",
+      "default": false,
+      "description": "DEPRECATED: Use mode='semantic' instead. Kept for backward compatibility."
     }
   },
   "required": ["query"]
 }
 ```
+
+**Mode Descriptions**:
+
+- `keyword`: Fast text matching (filename + content tokens)
+- `semantic`: AI embedding-based similarity (all-MiniLM-L6-v2)
+- `hybrid` **(default)**: 70% semantic + 30% keyword weighting
+
+**Mode Selection Priority**:
+
+1. If `mode` is explicitly set → use that mode
+2. Else if `semantic=true` → use "semantic" mode (backward compat)
+3. Else → use "hybrid" (default)
 
 - **Output Schema**:
 
@@ -69,6 +94,57 @@
   }
 ]
 ```
+
+**Example Requests**:
+
+```json
+// Hybrid search (default)
+{
+  "jsonrpc": "2.0",
+  "method": "read_context",
+  "params": {
+    "query": "authentication",
+    "limit": 10
+  }
+}
+
+// Explicit keyword-only
+{
+  "jsonrpc": "2.0",
+  "method": "read_context",
+  "params": {
+    "query": "login flow",
+    "mode": "keyword"
+  }
+}
+
+// Semantic search (new syntax)
+{
+  "jsonrpc": "2.0",
+  "method": "read_context",
+  "params": {
+    "query": "concurrent programming",
+    "mode": "semantic"
+  }
+}
+
+// Legacy semantic syntax (still supported)
+{
+  "jsonrpc": "2.0",
+  "method": "read_context",
+  "params": {
+    "query": "error handling",
+    "semantic": true
+  }
+}
+```
+
+**Performance Expectations**:
+
+- Keyword: < 100ms for 500 files
+- Semantic (cold): 2-5s for first search (model download + embedding)
+- Semantic (warm): 200-300ms (80%+ cache hit rate)
+- Hybrid: Similar to semantic (cache-dependent)
 
 ### 2. `read_doc`
 

@@ -42,7 +42,11 @@ enum Commands {
         /// Optional initial search query
         query: Option<String>,
 
-        /// Use semantic search instead of keyword matching
+        /// Search mode: keyword, semantic, or hybrid (default)
+        #[arg(long, default_value = "hybrid")]
+        mode: String,
+
+        /// Use semantic search (deprecated, use --mode=semantic)
         #[arg(long)]
         semantic: bool,
     },
@@ -150,7 +154,7 @@ async fn main() {
             dry_run,
             token_limit,
         } => cmd_scene(dry_run, token_limit).await,
-        Commands::Open { query, semantic } => cmd_open(query, semantic).await,
+        Commands::Open { query, mode, semantic } => cmd_open(query, mode, semantic).await,
 
         Commands::Watch => cmd_watch().await,
 
@@ -308,18 +312,27 @@ async fn cmd_scene(dry_run: bool, _token_limit: Option<usize>) -> anyhow::Result
     Ok(())
 }
 
-async fn cmd_open(query: Option<String>, semantic: bool) -> anyhow::Result<()> {
-    use cue_core::context::search_workspace;
+async fn cmd_open(query: Option<String>, mode: String, semantic: bool) -> anyhow::Result<()> {
+    use cue_core::context::{search_workspace_with_mode, SearchMode};
     use std::io::{self, Write};
 
     let cwd = std::env::current_dir()?;
     let query_str = query.unwrap_or_default();
 
-    if semantic {
-        eprintln!("🔍 Using semantic search...");
+    // Determine search mode: --semantic flag overrides --mode for backward compat
+    let search_mode = if semantic {
+        SearchMode::Semantic
+    } else {
+        SearchMode::parse(&mode)
+    };
+
+    match search_mode {
+        SearchMode::Hybrid => eprintln!("🔍 Using hybrid search (semantic + keyword)..."),
+        SearchMode::Semantic => eprintln!("🔍 Using semantic search..."),
+        SearchMode::Keyword => eprintln!("🔍 Using keyword search..."),
     }
 
-    let docs = search_workspace(&cwd, &query_str, semantic)?;
+    let docs = search_workspace_with_mode(&cwd, &query_str, search_mode, None)?;
 
     if docs.is_empty() {
         eprintln!("No results found for query: '{}'", query_str);

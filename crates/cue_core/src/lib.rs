@@ -11,11 +11,15 @@ use std::path::{Path, PathBuf};
 
 pub mod cache;
 pub mod context;
+pub mod embedding_cache;
 pub mod embeddings;
 pub mod engine;
 pub mod graph;
 pub mod graph_viz;
 pub mod tasks;
+
+// Re-export commonly used functions
+pub use context::save_embedding_cache;
 
 /// Parse a markdown file into a Document
 #[tracing::instrument(skip_all, fields(path = ?path))]

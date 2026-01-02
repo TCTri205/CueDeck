@@ -244,5 +244,124 @@ Based on typical CueDeck workspace (500 files, 50 active cards):
 | Anchor depth | 6 | 10 | Constant |
 | Concurrent cue instances | 5 | 10 | Lock contention |
 
+## 7. Hybrid Search Algorithm
+
+CueDeck v2.3.0+ combines keyword and semantic search for optimal relevance.
+
+```mermaid
+graph TB
+    A[Query Input] --> B[Generate Query Embedding]
+    A --> C[Tokenize Query]
+    
+    D[Markdown Files] --> E[Parallel Processing]
+    
+    B --> E
+    C --> E
+    
+    E --> F{For Each File}
+    F --> G[Compute Keyword Score<br/>100 filename + 50 content + 10 tokens]
+    F --> H[Get Cached Embedding<br/>or Compute & Cache]
+    
+    H --> I[Cosine Similarity]
+    B --> I
+    
+    G --> J[Normalize to [0,1]]
+    I --> K[Score ∈ [0,1]]
+    
+    J --> L[Hybrid Score = <br/>0.7×semantic + 0.3×keyword]
+    K --> L
+    
+    L --> M{Score > threshold?}
+    M -->|Yes| N[Include in Results]
+    M -->|No| O[Discard]
+    
+    N --> P[Sort by Hybrid Score]
+    P --> Q[Return Top 10]
+    
+    style B fill:#4CAF50,color:#fff
+    style H fill:#2196F3,color:#fff
+    style L fill:#FF9800,color:#fff
+    style Q fill:#9C27B0,color:#fff
+```
+
+### 7.1 Search Modes
+
+| Mode | Algorithm | Performance | Use Case |
+| :--- | :--- | :--- | :--- |
+| **Keyword** | String matching (score_file) | ~50ms | Exact terms, filenames |
+| **Semantic** | Cosine similarity only | ~2-5s (first run) / ~200ms (cached) | Conceptual search |
+| **Hybrid** | Weighted combination | ~2-5s (first run) / ~250ms (cached) | **Default** - Best of both |
+
+### 7.2 Scoring Formula
+
+**Keyword Score** (normalized to [0, 1]):
+
+```text
+score = 0
+if filename contains query:          score += 100
+for each token in filename:          score += 10
+if content contains full query:      score += 50
+for each token in content:           score += 5
+
+normalized_keyword = min(score / 200, 1.0)
+```
+
+**Semantic Score** (cosine similarity ∈ [-1, 1], typically [0, 1]):
+
+```text
+doc_embedding = get_cached_or_compute(doc_hash, content[:5000])
+semantic_score = cosine_similarity(query_embedding, doc_embedding)
+```
+
+**Hybrid Score**:
+
+```text
+hybrid_score = semantic_score × 0.7 + normalized_keyword × 0.3
+```
+
+### 7.3 Embedding Cache
+
+**Strategy**: LRU (Least Recently Used) eviction with persistent storage
+
+```mermaid
+graph LR
+    A[Document] --> B{Cache Hit?}
+    B -->|Yes| C[Update Access Time]
+    B -->|No| D[Compute Embedding]
+    
+    C --> E[Return Cached Vector]
+    D --> F{Cache Full?}
+    
+    F -->|Yes| G[Evict LRU Entry]
+    F -->|No| H[Add to Cache]
+    
+    G --> H
+    H --> I[Return New Vector]
+    
+    style C fill:#4CAF50,color:#fff
+    style G fill:#f44336,color:#fff
+```
+
+**Performance**:
+
+- Cache hit: ~1ms (memory access)
+- Cache miss: ~1-2s (embedding generation + disk write)
+- Target hit rate: 80%+ after warm-up
+
+**Invalidation**: Document hash (SHA256) changes trigger re-embedding
+
+**Storage**: `.cuedeck/cache/embeddings.bin` (bincode serialization)
+
+### 7.4 Hybrid Search Performance Benchmarks
+
+| Operation | Cold (No Cache) | Warm (80% Hit) | Notes |
+| :--- | :--- | :--- | :--- |
+| Keyword search (100 files) | 50ms | 50ms | No caching needed |
+| Semantic search (100 files) | 150s | 20s | 100 × 1.5s embedding |
+| Hybrid search (100 files) | 150s | 25s | Cache critical |
+| read_context (MCP) | 2-5s | 200ms | Typical 10-file result |
+
+**Optimization**: Parallel embedding computation using `rayon` (8 cores → 8x speedup)
+
 ---
 **Related Docs**: [SYSTEM_ARCHITECTURE.md](./SYSTEM_ARCHITECTURE.md), [MODULE_DESIGN.md](./MODULE_DESIGN.md), [GLOSSARY.md](../01_general/GLOSSARY.md)

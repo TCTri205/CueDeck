@@ -43,26 +43,53 @@ Generates the context for the LLM.
 
 ### `cue open [QUERY]`
 
-Launches the interactive file selector with keyword or semantic search.
+Launches the interactive file selector with configurable search mode.
 
 - **Arguments**:
   - `QUERY`: Optional initial search filter.
+
 - **Flags**:
-  - `--semantic`: Enable semantic search using AI embeddings (requires ~22MB model download on first use).
-- **Search Modes**:
-  - **Keyword** (default): Fast exact/fuzzy text matching (~100ms).
-  - **Semantic** (`--semantic`): Conceptual similarity matching (~10-15s, uses all-MiniLM-L6-v2).
+  - `--mode=<MODE>`: Search mode selection (default: `hybrid`)
+    - `keyword`: Fast exact/fuzzy text matching (~50ms)
+    - `semantic`: AI-powered conceptual search (~2-5s first run, ~200ms cached)
+    - `hybrid`: **Default** - Combines both with 70/30 weighting (~250ms cached)
+  - `--semantic`: **Deprecated** - Use `--mode=semantic` instead (kept for backward compatibility)
+
+- **Search Behavior**:
+
+  | Mode | Filename Weight | Content Weight | Embedding | Cache |
+  | :--- | :--- | :--- | :--- | :--- |
+  | `keyword` | 100 (exact match) | 10 (token match) | No | No |
+  | `semantic` | 0 | Cosine similarity | Yes | Yes |
+  | `hybrid` | 30% of total | 70% of total | Yes | Yes |
+
 - **Interaction**:
-  - `Type`: Filter files by filename (high weight) or content (token match).
-  - `Up/Down`: Navigate results.
-  - `Enter`: Open selected file in `$EDITOR`.
-  - `Esc`: Exit.
+  - `Type`: Filter results
+  - `Up/Down`: Navigate results
+  - `Enter`: Open selected file in `$EDITOR`
+  - `Esc`: Exit
+
 - **Examples**:
 
   ```bash
-  cue open "authentication"          # Keyword search
-  cue open "concurrent programming" --semantic  # Semantic search
+  # Fast keyword search (exact matches)
+  cue open "authentication"
+  
+  # Conceptual search (understands synonyms)
+  cue open "concurrent programming" --mode=semantic
+  
+  # Hybrid (default, best relevance)
+  cue open "login flow"
+  cue open "error handling" --mode=hybrid  # Explicit
+  
+  # Legacy syntax (still supported)
+  cue open "auth" --semantic
   ```
+
+- **Performance**:
+  - First semantic/hybrid search: ~2-5s (downloads 22MB model + generates embeddings)
+  - Subsequent searches: ~200-300ms (uses cached embeddings)
+  - Cache stored in: `.cuedeck/cache/embeddings.bin`
 
 ### `cue watch`
 
@@ -213,8 +240,9 @@ Starts the MCP (Model Context Protocol) Server for AI integration (Module 3).
   ```
 
 - **Supported Methods**:
-  - `read_context(query, limit, semantic)` — Fuzzy or semantic search across context
-    - `semantic` (optional, boolean): Enable semantic search (default: false)
+  - `read_context(query, limit, mode, semantic)` — Fuzzy, semantic, or hybrid search across context
+    - `mode` (optional, string): Search mode: `keyword`, `semantic`, or `hybrid` (default: `hybrid`)
+    - `semantic` (optional, boolean): **Deprecated** - Use `mode` parameter instead (backward compatibility)
   - `read_doc(path, anchor)` — Read specific document or section
   - `list_tasks(status)` — List cards by status
   - `update_task(id, updates)` — Modify card frontmatter

@@ -2,6 +2,31 @@
 
 All notable changes to CueDeck will be documented in this file.
 
+## [2.5.0] - 2026-01-01
+
+### Performance
+
+- **Binary Size Optimization**: Reduced release binary from **29.3 MB to 24.1 MB** (17.5% reduction)
+  - Applied aggressive compiler optimizations:
+    - `opt-level = "z"` - Optimize for size instead of speed
+    - `lto = "fat"` - Full link-time optimization across all crates
+    - `panic = "abort"` - Smaller panic handler (no unwinding)
+    - `strip = "symbols"` - Remove all debug symbols
+  - Created optional feature flags for `fastembed` and `petgraph`
+  - Analyzed dependencies with `cargo tree --duplicate`
+  - Binary remains fully functional with all features enabled
+
+### Documentation
+
+- Added comprehensive installation guide to README.md
+  - Pre-built binary installation instructions
+  - Build from source guide with requirements
+  - MCP integration setup for Antigravity IDE and Claude Desktop
+  - Quick start guide with essential commands
+  - Troubleshooting section for common issues
+- Created QA test report documenting 23/23 passing tests
+- Enhanced README with features showcase and project structure
+
 ## [2.4.0] - 2026-01-01
 
 ### Added
