@@ -343,6 +343,10 @@ pub fn check_link_integrity(workspace_root: &Path) -> Result<Vec<HealthCheck>> {
     // Captures: 1=text, 2=url
     let link_regex = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").map_err(|e| crate::CueError::ParseError(e.to_string()))?;
     
+    // Regex to match fenced code blocks (```code```)
+    // This prevents parsing links inside code examples
+    let code_block_regex = Regex::new(r"```[\s\S]*?```").map_err(|e| crate::CueError::ParseError(e.to_string()))?;
+    
     // Regex for anchors in file content: # Header or ## Header
     // We will parse files on demand to check anchors
     
@@ -358,8 +362,11 @@ pub fn check_link_integrity(workspace_root: &Path) -> Result<Vec<HealthCheck>> {
                 Err(_) => continue, // Skip unreadable
             };
             
-            // Iterate over all links in file
-            for (line_idx, cap) in link_regex.captures_iter(&content).enumerate() {
+            // Remove code blocks to avoid false positives from regex patterns in code
+            let content_without_code = code_block_regex.replace_all(&content, "");
+            
+            // Iterate over all links in file (excluding those in code blocks)
+            for (line_idx, cap) in link_regex.captures_iter(&content_without_code).enumerate() {
                 let full_match = cap.get(0).unwrap().as_str();
                 let url = cap.get(2).unwrap().as_str();
                 
@@ -582,6 +589,29 @@ mod tests {
         
         let file1 = temp.child("doc1.md");
         file1.write_str("[Code](file:///d:/Projects/code.rs)\n[Another](file:///c:/Users/file.md)").unwrap();
+        
+        let checks = check_link_integrity(temp.path()).unwrap();
+        assert_eq!(checks.len(), 1);
+        assert_eq!(checks[0].status, CheckStatus::Pass);
+        assert_eq!(checks[0].message, "All internal links are valid");
+    }
+
+    #[test]
+    fn test_check_link_integrity_skip_code_blocks() {
+        let temp = assert_fs::TempDir::new().unwrap();
+        
+        let file1 = temp.child("doc1.md");
+        // Regex patterns in code blocks should NOT be parsed as links
+        file1.write_str(
+            "# Documentation\n\n\
+            ```javascript\n\
+            const regex = /import\\s+['\"]([^'\"]+)['\"]/g;\n\
+            ```\n\n\
+            [Valid Link](doc2.md)\n"
+        ).unwrap();
+        
+        let file2 = temp.child("doc2.md");
+        file2.write_str("# Target").unwrap();
         
         let checks = check_link_integrity(temp.path()).unwrap();
         assert_eq!(checks.len(), 1);
