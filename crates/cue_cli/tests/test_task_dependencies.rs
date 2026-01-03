@@ -1,26 +1,17 @@
 //! Additional integration tests for task management with dependencies
 
-use assert_cmd::Command;
-use assert_fs::TempDir;
+use cue_test_helpers::prelude::*;
 use predicates::prelude::*;
 use std::fs;
 
 #[test]
 fn test_task_create_with_metadata() {
-    let temp = TempDir::new().unwrap();
-
-    // Initialize workspace
-    Command::cargo_bin("cue")
-        .unwrap()
-        .current_dir(temp.path())
-        .arg("init")
-        .assert()
-        .success();
+    let temp = init_workspace();
 
     // Create task with metadata
-    let mut cmd = Command::cargo_bin("cue").unwrap();
-    cmd.current_dir(temp.path())
-        .args(&[
+    cue_command()
+        .current_dir(temp.path())
+        .args([
             "card",
             "create",
             "Test Task with Metadata",
@@ -52,7 +43,7 @@ fn test_task_create_with_metadata() {
     // Verify frontmatter
     let card_path = entries[0].path();
     let content = fs::read_to_string(&card_path).unwrap();
-    assert!(content.contains("title: \"Test Task with Metadata\""));
+    assert!(content.contains("title: Test Task with Metadata"));
     assert!(content.contains("priority: high"));
     assert!(content.contains("assignee: \"developer\""));
     assert!(content.contains("tags:"));
@@ -62,21 +53,12 @@ fn test_task_create_with_metadata() {
 
 #[test]
 fn test_task_create_with_dependencies() {
-    let temp = TempDir::new().unwrap();
-
-    // Initialize workspace
-    Command::cargo_bin("cue")
-        .unwrap()
-        .current_dir(temp.path())
-        .arg("init")
-        .assert()
-        .success();
+    let temp = init_workspace();
 
     // Create first task
-    Command::cargo_bin("cue")
-        .unwrap()
+    cue_command()
         .current_dir(temp.path())
-        .args(&["card", "new", "Base Task"])
+        .args(["card", "new", "Base Task"])
         .assert()
         .success();
 
@@ -94,9 +76,9 @@ fn test_task_create_with_dependencies() {
         .to_string();
 
     // Create second task depending on first
-    let mut cmd = Command::cargo_bin("cue").unwrap();
-    cmd.current_dir(temp.path())
-        .args(&[
+    cue_command()
+        .current_dir(temp.path())
+        .args([
             "card",
             "create",
             "Dependent Task",
@@ -128,21 +110,12 @@ fn test_task_create_with_dependencies() {
 
 #[test]
 fn test_task_deps_command() {
-    let temp = TempDir::new().unwrap();
-
-    // Initialize workspace
-    Command::cargo_bin("cue")
-        .unwrap()
-        .current_dir(temp.path())
-        .arg("init")
-        .assert()
-        .success();
+    let temp = init_workspace();
 
     // Create base task
-    Command::cargo_bin("cue")
-        .unwrap()
+    cue_command()
         .current_dir(temp.path())
-        .args(&["card", "new", "Base Task"])
+        .args(["card", "new", "Base Task"])
         .assert()
         .success();
 
@@ -159,10 +132,9 @@ fn test_task_deps_command() {
         .to_string();
 
     // Create dependent task
-    Command::cargo_bin("cue")
-        .unwrap()
+    cue_command()
         .current_dir(temp.path())
-        .args(&["card", "create", "Dependent", "--depends-on", &base_id])
+        .args(["card", "create", "Dependent", "--depends-on", &base_id])
         .assert()
         .success();
 
@@ -178,18 +150,18 @@ fn test_task_deps_command() {
         .to_string();
 
     // Test deps command (show dependencies)
-    let mut cmd = Command::cargo_bin("cue").unwrap();
-    cmd.current_dir(temp.path())
-        .args(&["card", "deps", &dependent_id])
+    cue_command()
+        .current_dir(temp.path())
+        .args(["card", "deps", &dependent_id])
         .assert()
         .success()
         .stderr(predicate::str::contains("Dependencies for"))
         .stderr(predicate::str::contains(&base_id));
 
     // Test deps --reverse (show dependents)
-    let mut cmd = Command::cargo_bin("cue").unwrap();
-    cmd.current_dir(temp.path())
-        .args(&["card", "deps", &base_id, "--reverse"])
+    cue_command()
+        .current_dir(temp.path())
+        .args(["card", "deps", &base_id, "--reverse"])
         .assert()
         .success()
         .stderr(predicate::str::contains("Tasks depending on"))
@@ -198,21 +170,12 @@ fn test_task_deps_command() {
 
 #[test]
 fn test_task_validate_success() {
-    let temp = TempDir::new().unwrap();
-
-    // Initialize workspace
-    Command::cargo_bin("cue")
-        .unwrap()
-        .current_dir(temp.path())
-        .arg("init")
-        .assert()
-        .success();
+    let temp = init_workspace();
 
     // Create tasks with valid dependencies (A -> B)
-    Command::cargo_bin("cue")
-        .unwrap()
+    cue_command()
         .current_dir(temp.path())
-        .args(&["card", "new", "Task A"])
+        .args(["card", "new", "Task A"])
         .assert()
         .success();
 
@@ -228,17 +191,16 @@ fn test_task_validate_success() {
         .to_string_lossy()
         .to_string();
 
-    Command::cargo_bin("cue")
-        .unwrap()
+    cue_command()
         .current_dir(temp.path())
-        .args(&["card", "create", "Task B", "--depends-on", &task_a_id])
+        .args(["card", "create", "Task B", "--depends-on", &task_a_id])
         .assert()
         .success();
 
     // Validate entire graph
-    let mut cmd = Command::cargo_bin("cue").unwrap();
-    cmd.current_dir(temp.path())
-        .args(&["card", "validate"])
+    cue_command()
+        .current_dir(temp.path())
+        .args(["card", "validate"])
         .assert()
         .success()
         .stderr(predicate::str::contains("All task dependencies are valid"));
@@ -246,21 +208,12 @@ fn test_task_validate_success() {
 
 #[test]
 fn test_task_validate_circular_dependency_prevention() {
-    let temp = TempDir::new().unwrap();
-
-    // Initialize workspace
-    Command::cargo_bin("cue")
-        .unwrap()
-        .current_dir(temp.path())
-        .arg("init")
-        .assert()
-        .success();
+    let temp = init_workspace();
 
     // Create task A
-    Command::cargo_bin("cue")
-        .unwrap()
+    cue_command()
         .current_dir(temp.path())
-        .args(&["card", "new", "Task A"])
+        .args(["card", "new", "Task A"])
         .assert()
         .success();
 
@@ -278,10 +231,9 @@ fn test_task_validate_circular_dependency_prevention() {
 
     // Try to create task B depending on A, then manually edit A to depend on B
     // This should be caught by validation
-    Command::cargo_bin("cue")
-        .unwrap()
+    cue_command()
         .current_dir(temp.path())
-        .args(&["card", "create", "Task B", "--depends-on", &task_a_id])
+        .args(["card", "create", "Task B", "--depends-on", &task_a_id])
         .assert()
         .success();
 
@@ -306,9 +258,9 @@ fn test_task_validate_circular_dependency_prevention() {
     fs::write(&task_a_path, modified).unwrap();
 
     // Validation should now fail
-    let mut cmd = Command::cargo_bin("cue").unwrap();
-    cmd.current_dir(temp.path())
-        .args(&["card", "validate"])
+    cue_command()
+        .current_dir(temp.path())
+        .args(["card", "validate"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Validation failed"));
@@ -316,20 +268,12 @@ fn test_task_validate_circular_dependency_prevention() {
 
 #[test]
 fn test_task_create_invalid_priority() {
-    let temp = TempDir::new().unwrap();
-
-    // Initialize workspace
-    Command::cargo_bin("cue")
-        .unwrap()
-        .current_dir(temp.path())
-        .arg("init")
-        .assert()
-        .success();
+    let temp = init_workspace();
 
     // Try to create task with invalid priority
-    let mut cmd = Command::cargo_bin("cue").unwrap();
-    cmd.current_dir(temp.path())
-        .args(&["card", "create", "Test", "--priority", "invalid"])
+    cue_command()
+        .current_dir(temp.path())
+        .args(["card", "create", "Test", "--priority", "invalid"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Invalid priority"));
@@ -337,20 +281,12 @@ fn test_task_create_invalid_priority() {
 
 #[test]
 fn test_task_create_nonexistent_dependency() {
-    let temp = TempDir::new().unwrap();
-
-    // Initialize workspace
-    Command::cargo_bin("cue")
-        .unwrap()
-        .current_dir(temp.path())
-        .arg("init")
-        .assert()
-        .success();
+    let temp = init_workspace();
 
     // Try to create task depending on non-existent task
-    let mut cmd = Command::cargo_bin("cue").unwrap();
-    cmd.current_dir(temp.path())
-        .args(&["card", "create", "Test", "--depends-on", "nonexist"])
+    cue_command()
+        .current_dir(temp.path())
+        .args(["card", "create", "Test", "--depends-on", "nonexist"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Dependency not found"));

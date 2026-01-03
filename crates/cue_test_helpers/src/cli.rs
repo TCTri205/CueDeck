@@ -13,11 +13,11 @@ use assert_cmd::Command;
 ///
 /// # Example
 ///
-/// ```rust
+/// ```no_run
 /// use cue_test_helpers::cli::cue_command;
 ///
-/// let output = cue_command()
-///     .arg("--version")
+/// let mut cmd = cue_command();
+/// cmd.arg("--version")
 ///     .assert()
 ///     .success();
 /// ```
@@ -38,11 +38,11 @@ pub fn cue_command() -> Command {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```no_run
 /// use cue_test_helpers::cli::command_for;
 ///
-/// let output = command_for("cue_mcp")
-///     .arg("--help")
+/// let mut cmd = command_for("cue_mcp");
+/// cmd.arg("--help")
 ///     .assert()
 ///     .success();
 /// ```

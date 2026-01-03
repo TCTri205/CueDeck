@@ -41,7 +41,7 @@ async fn test_read_context_pagination() {
         // If total > 5, we should have a cursor
         if total > 5 {
             assert!(parsed["next_cursor"].is_string(), "Should have cursor when more results exist");
-            assert_eq!(parsed["has_more"].as_bool().unwrap(), true);
+            assert!(parsed["has_more"].as_bool().unwrap());
         }
         
         // Results should be limited to 5

@@ -30,6 +30,9 @@ pub fn check_metadata_consistency(workspace_root: &Path) -> Result<Vec<HealthChe
     // Known valid priorities
     let valid_priorities = ["low", "medium", "high", "critical"];
     
+    // Compile regex once outside loop
+    let frontmatter_regex = Regex::new(r"(?ms)^---\r?\n(.*?)\r?\n---").unwrap();
+    
     for entry in WalkDir::new(&cards_dir)
         .max_depth(1)
         .into_iter()
@@ -45,7 +48,6 @@ pub fn check_metadata_consistency(workspace_root: &Path) -> Result<Vec<HealthChe
             };
             
             // Parse frontmatter
-            let frontmatter_regex = Regex::new(r"(?ms)^---\r?\n(.*?)\r?\n---").unwrap();
             if let Some(captures) = frontmatter_regex.captures(&content) {
                 let yaml_str = captures.get(1).unwrap().as_str();
                 
@@ -53,14 +55,14 @@ pub fn check_metadata_consistency(workspace_root: &Path) -> Result<Vec<HealthChe
                     Ok(yaml) => {
                         if let serde_yaml::Value::Mapping(map) = yaml {
                             // Check priority
-                            if let Some(serde_yaml::Value::String(priority)) = map.get(&serde_yaml::Value::String("priority".to_string())) {
+                            if let Some(serde_yaml::Value::String(priority)) = map.get(serde_yaml::Value::String("priority".to_string())) {
                                 if !valid_priorities.contains(&priority.to_lowercase().as_str()) {
                                     issues.push(format!("{}: Unknown priority '{}'", filename, priority));
                                 }
                             }
                             
                             // Check tags and count them
-                            if let Some(serde_yaml::Value::Sequence(tags)) = map.get(&serde_yaml::Value::String("tags".to_string())) {
+                            if let Some(serde_yaml::Value::Sequence(tags)) = map.get(serde_yaml::Value::String("tags".to_string())) {
                                 for tag in tags {
                                     if let serde_yaml::Value::String(tag_str) = tag {
                                         *tag_counts.entry(tag_str.clone()).or_insert(0) += 1;
@@ -69,24 +71,24 @@ pub fn check_metadata_consistency(workspace_root: &Path) -> Result<Vec<HealthChe
                             }
                             
                             // Check timestamp validity
-                            if let Some(serde_yaml::Value::String(created)) = map.get(&serde_yaml::Value::String("created".to_string())) {
+                            if let Some(serde_yaml::Value::String(created)) = map.get(serde_yaml::Value::String("created".to_string())) {
                                 if DateTime::parse_from_rfc3339(created).is_err() {
                                     issues.push(format!("{}: Invalid timestamp format for 'created': {}", filename, created));
                                 }
                             }
                             
-                            if let Some(serde_yaml::Value::String(updated)) = map.get(&serde_yaml::Value::String("updated".to_string())) {
+                            if let Some(serde_yaml::Value::String(updated)) = map.get(serde_yaml::Value::String("updated".to_string())) {
                                 if DateTime::parse_from_rfc3339(updated).is_err() {
                                     issues.push(format!("{}: Invalid timestamp format for 'updated': {}", filename, updated));
                                 }
                             }
                             
                             // Check for stale tasks (active > 90 days old)
-                            if let Some(serde_yaml::Value::String(status)) = map.get(&serde_yaml::Value::String("status".to_string())) {
+                            if let Some(serde_yaml::Value::String(status)) = map.get(serde_yaml::Value::String("status".to_string())) {
                                 if status == "active" || status == "in-progress" {
                                     // Check created or updated date
-                                    let date_str = map.get(&serde_yaml::Value::String("updated".to_string()))
-                                        .or_else(|| map.get(&serde_yaml::Value::String("created".to_string())));
+                                    let date_str = map.get(serde_yaml::Value::String("updated".to_string()))
+                                        .or_else(|| map.get(serde_yaml::Value::String("created".to_string())));
                                     
                                     if let Some(serde_yaml::Value::String(date)) = date_str {
                                         if let Ok(task_date) = DateTime::parse_from_rfc3339(date) {
@@ -201,54 +203,48 @@ pub fn repair_metadata(workspace_root: &Path, _check: &HealthCheck, normalize_ta
             // Fix timestamps and tags
             if let serde_yaml::Value::Mapping(ref mut map) = yaml_value {
                 // Fix 'created' field
-                if let Some(created_val) = map.get(&serde_yaml::Value::String("created".to_string())) {
-                    if let serde_yaml::Value::String(created_str) = created_val {
-                        if DateTime::parse_from_rfc3339(created_str).is_err() {
-                            // Try to parse and fix
-                            if let Some(fixed) = try_parse_and_fix_timestamp(created_str) {
-                                map.insert(
-                                    serde_yaml::Value::String("created".to_string()),
-                                    serde_yaml::Value::String(fixed),
-                                );
-                                modified = true;
-                            }
+                if let Some(serde_yaml::Value::String(created_str)) = map.get(serde_yaml::Value::String("created".to_string())) {
+                    if DateTime::parse_from_rfc3339(created_str).is_err() {
+                        // Try to parse and fix
+                        if let Some(fixed) = try_parse_and_fix_timestamp(created_str) {
+                            map.insert(
+                                serde_yaml::Value::String("created".to_string()),
+                                serde_yaml::Value::String(fixed),
+                            );
+                            modified = true;
                         }
                     }
                 }
                 
                 // Fix 'updated' field
-                if let Some(updated_val) = map.get(&serde_yaml::Value::String("updated".to_string())) {
-                    if let serde_yaml::Value::String(updated_str) = updated_val {
-                        if DateTime::parse_from_rfc3339(updated_str).is_err() {
-                            // Try to parse and fix
-                            if let Some(fixed) = try_parse_and_fix_timestamp(updated_str) {
-                                map.insert(
-                                    serde_yaml::Value::String("updated".to_string()),
-                                    serde_yaml::Value::String(fixed),
-                                );
-                                modified = true;
-                            }
+                if let Some(serde_yaml::Value::String(updated_str)) = map.get(serde_yaml::Value::String("updated".to_string())) {
+                    if DateTime::parse_from_rfc3339(updated_str).is_err() {
+                        // Try to parse and fix
+                        if let Some(fixed) = try_parse_and_fix_timestamp(updated_str) {
+                            map.insert(
+                                serde_yaml::Value::String("updated".to_string()),
+                                serde_yaml::Value::String(fixed),
+                            );
+                            modified = true;
                         }
                     }
                 }
                 
                 // Normalize tags if enabled
                 if normalize_tags {
-                    if let Some(tags_val) = map.get_mut(&serde_yaml::Value::String("tags".to_string())) {
-                        if let serde_yaml::Value::Sequence(ref mut tags) = tags_val {
-                            let mut tags_modified = false;
-                            for tag in tags.iter_mut() {
-                                if let serde_yaml::Value::String(tag_str) = tag {
-                                    let normalized = tag_str.to_lowercase();
-                                    if &normalized != tag_str {
-                                        *tag = serde_yaml::Value::String(normalized);
-                                        tags_modified = true;
-                                    }
+                    if let Some(serde_yaml::Value::Sequence(ref mut tags)) = map.get_mut(serde_yaml::Value::String("tags".to_string())) {
+                        let mut tags_modified = false;
+                        for tag in tags.iter_mut() {
+                            if let serde_yaml::Value::String(tag_str) = tag {
+                                let normalized = tag_str.to_lowercase();
+                                if &normalized != tag_str {
+                                    *tag = serde_yaml::Value::String(normalized);
+                                    tags_modified = true;
                                 }
                             }
-                            if tags_modified {
-                                modified = true;
-                            }
+                        }
+                        if tags_modified {
+                            modified = true;
                         }
                     }
                 }
@@ -409,8 +405,7 @@ pub fn check_link_integrity(workspace_root: &Path) -> Result<Vec<HealthCheck>> {
 
 fn validate_internal_link(workspace_root: &Path, source_file: &Path, link: &str) -> std::result::Result<(), String> {
     // Handle anchor-only links (#section)
-    if link.starts_with('#') {
-        let anchor = &link[1..];
+    if let Some(anchor) = link.strip_prefix('#') {
         if anchor.is_empty() { return Ok(()); } // empty anchor is valid (top of page)
         return check_anchor_in_file(source_file, anchor); // check in self
     }

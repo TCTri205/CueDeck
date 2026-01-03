@@ -279,7 +279,7 @@ fn search_workspace_keyword_all(root: &Path, query: &str, filters: Option<&Searc
     let all_docs = results
         .into_iter()
         .filter(|(doc, _)| {
-            filters.map_or(true, |f| f.matches(doc))
+            filters.is_none_or(|f| f.matches(doc))
         })
         .map(|(doc, _)| doc)
         .collect();
@@ -367,7 +367,7 @@ fn search_workspace_semantic_all(root: &Path, query: &str, filters: Option<&Sear
     Ok(sorted_candidates
         .into_iter()
         .filter(|(doc, _)| {
-            filters.map_or(true, |f| f.matches(doc))
+            filters.is_none_or(|f| f.matches(doc))
         })
         .map(|(doc, _)| doc)
         .collect())
@@ -477,7 +477,7 @@ fn search_workspace_hybrid_all(root: &Path, query: &str, filters: Option<&Search
     Ok(scored
         .into_iter()
         .filter(|(doc, _)| {
-            filters.map_or(true, |f| f.matches(doc))
+            filters.is_none_or(|f| f.matches(doc))
         })
         .map(|(doc, _)| doc)
         .collect())

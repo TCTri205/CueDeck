@@ -11,8 +11,8 @@ fn setup_test_workspace() -> PathBuf {
     
     if !test_dir.exists() {
         fs::create_dir_all(&test_dir).unwrap();
-        fs::create_dir_all(&test_dir.join(".cuedeck")).unwrap();
-        fs::create_dir_all(&test_dir.join(".cuedeck/docs")).unwrap();
+        fs::create_dir_all(test_dir.join(".cuedeck")).unwrap();
+        fs::create_dir_all(test_dir.join(".cuedeck/docs")).unwrap();
         
         // Generate 100 sample markdown files
         for i in 0..100 {

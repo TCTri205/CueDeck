@@ -258,7 +258,7 @@ impl TaskGraph {
         let mut missing = Vec::new();
         let cards_dir = workspace_root.join(".cuedeck/cards");
 
-        for (task_id, _) in &self.task_to_node {
+        for task_id in self.task_to_node.keys() {
             let task_path = cards_dir.join(format!("{}.md", task_id));
             if let Ok(content) = fs::read_to_string(&task_path) {
                 if let Some(deps) = extract_depends_on(&content) {
@@ -314,7 +314,7 @@ impl TaskGraph {
         output.push_str("  rankdir=LR;\n");
 
         // Add nodes
-        for (task_id, _) in &self.task_to_node {
+        for task_id in self.task_to_node.keys() {
             writeln!(&mut output, "  \"{}\"", task_id).unwrap();
         }
 
@@ -347,7 +347,7 @@ impl TaskGraph {
 
         // If no edges, show all nodes standalone
         if self.graph.edge_count() == 0 {
-            for (task_id, _) in &self.task_to_node {
+            for task_id in self.task_to_node.keys() {
                 writeln!(&mut output, "  {}[\"{}\"]", 
                          sanitize_mermaid_id(task_id), task_id).unwrap();
             }

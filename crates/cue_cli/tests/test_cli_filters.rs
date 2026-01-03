@@ -18,7 +18,7 @@ fn create_task(temp: &TempDir, title: &str, args: &[&str]) -> String {
         .lines()
         .find(|l| l.contains("Created task:"))
         .and_then(|l| l.split("Created task:").nth(1))
-        .and_then(|s| s.trim().split_whitespace().next())
+        .and_then(|s| s.split_whitespace().next())
         .expect("Failed to extract ID")
         .to_string()
 }

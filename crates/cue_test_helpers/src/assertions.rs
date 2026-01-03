@@ -18,6 +18,7 @@ use predicates::str::contains;
 ///
 /// ```rust
 /// use cue_test_helpers::assertions::stderr_not_contains;
+/// use predicates::prelude::*;
 ///
 /// let output = std::process::Command::new("cue")
 ///     .arg("list")
@@ -39,9 +40,9 @@ pub fn stderr_not_contains(values: &[&str]) -> impl Predicate<str> {
 /// Checks for basic JSON-RPC structure (jsonrpc field, id, result or error).
 ///
 /// # Example
-///
 /// ```rust
 /// use cue_test_helpers::assertions::valid_jsonrpc_response;
+/// use predicates::prelude::*;
 ///
 /// let response = r#"{"jsonrpc":"2.0","id":1,"result":{}}"#;
 /// assert!(valid_jsonrpc_response().eval(response));
@@ -57,11 +58,11 @@ pub fn valid_jsonrpc_response() -> impl Predicate<str> {
 /// CueDeck task IDs are 6-character alphanumeric strings.
 ///
 /// # Example
-///
 /// ```rust
 /// use cue_test_helpers::assertions::contains_task_id;
+/// use predicates::prelude::*;
 ///
-/// let output = "Task created: abc123";
+/// let output = "✓ Created task: abc123 at ...";
 /// assert!(contains_task_id().eval(output));
 /// ```
 pub fn contains_task_id() -> impl Predicate<str> {
@@ -81,7 +82,7 @@ mod tests {
     fn test_stderr_not_contains() {
         let stderr = "Some output without errors";
         assert!(stderr_not_contains(&["ERROR", "WARN"]).eval(stderr));
-        
+
         let stderr_with_error = "ERROR: something went wrong";
         assert!(!stderr_not_contains(&["ERROR"]).eval(stderr_with_error));
     }
@@ -90,7 +91,7 @@ mod tests {
     fn test_valid_jsonrpc_response() {
         let valid = r#"{"jsonrpc":"2.0","id":1,"result":{}}"#;
         assert!(valid_jsonrpc_response().eval(valid));
-        
+
         let valid_error = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32600}}"#;
         assert!(valid_jsonrpc_response().eval(valid_error));
         
