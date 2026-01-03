@@ -1,7 +1,7 @@
 # Project Roadmap
 
 > [!NOTE]
-> **v2.2.0 Release** (2026-01-02): Phases 1-5 are **COMPLETED**. Semantic search with embedding cache integrated and benchmarked.
+> **v2.6.0 Release** (2026-01-03): Phases 1-5 are **COMPLETED**. Advanced Search Filters integrated and tested.
 >
 > **Strategic Decisions**: ADR-006 (Hybrid Database), ADR-007 (Client-to-Cloud Sync) approved for Phases 6-7.
 

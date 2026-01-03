@@ -359,6 +359,24 @@ async fn handle_tools_list() -> Result<Value> {
                         "assignee": {
                             "type": "string",
                             "description": "Filter by assignee name"
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Filter by tags (OR logic, ANY match)"
+                        },
+                        "priority": {
+                            "type": "string",
+                            "enum": ["critical", "high", "medium", "low"],
+                            "description": "Filter by priority"
+                        },
+                        "created": {
+                            "type": "string",
+                            "description": "Filter by created date (YYYY, YYYY-MM, YYYY-MM-DD, >2w, <7d)"
+                        },
+                        "updated": {
+                            "type": "string",
+                            "description": "Filter by updated date (same formats as created)"
                         }
                     }
                 }
@@ -573,6 +591,10 @@ async fn handle_list_tasks(params: Option<Value>) -> Result<Value> {
     struct ListTasksParams {
         status: Option<String>,
         assignee: Option<String>,
+        tags: Option<Vec<String>>,
+        priority: Option<String>,
+        created: Option<String>,
+        updated: Option<String>,
     }
 
     let params: ListTasksParams = if let Some(p) = params {
@@ -582,6 +604,10 @@ async fn handle_list_tasks(params: Option<Value>) -> Result<Value> {
         ListTasksParams {
             status: None,
             assignee: None,
+            tags: None,
+            priority: None,
+            created: None,
+            updated: None,
         }
     };
 
@@ -589,9 +615,26 @@ async fn handle_list_tasks(params: Option<Value>) -> Result<Value> {
     let workspace = std::env::var("CUE_WORKSPACE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+    // Build filters
+    let filters = cue_core::TaskFilters {
+        status: params.status,
+        assignee: params.assignee,
+        tags: params.tags,
+        priority: params.priority,
+        created: params
+            .created
+            .as_deref()
+            .map(cue_core::task_filters::parse_date_filter)
+            .transpose()?,
+        updated: params
+            .updated
+            .as_deref()
+            .map(cue_core::task_filters::parse_date_filter)
+            .transpose()?,
+    };
     
-    let tasks =
-        cue_core::tasks::list_tasks(&workspace, params.status.as_deref(), params.assignee.as_deref())?;
+    let tasks = cue_core::tasks::list_tasks_filtered(&workspace, &filters)?;
 
     serde_json::to_value(tasks).map_err(CueError::JsonError)
 }

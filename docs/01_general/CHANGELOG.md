@@ -2,6 +2,36 @@
 
 All notable changes to CueDeck will be documented in this file.
 
+## [2.6.0] - 2026-01-03
+
+### Added
+
+- **Advanced Search Filters**: Enhanced task filtering capabilities for both CLI and MCP
+  - `--assignee` filter: Filter tasks by assignee name (exact match)
+  - `--priority` filter: Filter by task priority level
+  - `--tag` filter: Filter by tags (supports multiple tags, ANY match)
+  - `--status` filter: Enhanced status filtering (todo, active, done, archived)
+  - Relative date parsing: Support for "today", "yesterday", "this week", "last week"
+  - MCP integration: All filters available via `list_tasks` tool parameters
+
+### Fixed
+
+- **Date Filter Parsing**: Fixed relative date filter edge cases in `cue_core`
+  - Corrected "this week" and "last week" boundary calculations
+  - Improved timezone handling for date comparisons
+
+### Testing
+
+- Added comprehensive filter integration tests (`test_cli_filters.rs`)
+- All 53 tests passing across workspace
+- Validated filter combinations and edge cases
+
+### Components
+
+- `cue_mcp`: Updated `list_tasks` tool with new filter parameters
+- `cue_cli`: Enhanced `cue list` command with filter options
+- `cue_core`: Improved task filtering logic and date parsing
+
 ## [2.5.0] - 2026-01-01
 
 ### Performance

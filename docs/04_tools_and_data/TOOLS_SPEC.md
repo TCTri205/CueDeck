@@ -279,6 +279,24 @@
     "assignee": {
       "type": "string",
       "description": "Optional filter by assignee name"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Filter by tags (ANY match logic)"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"],
+      "description": "Filter by priority"
+    },
+    "created": {
+      "type": "string",
+      "description": "Filter by creation date (e.g. '2024-01-01', '>2w')"
+    },
+    "updated": {
+      "type": "string",
+      "description": "Filter by update date (e.g. '2024-01-01', '>2w')"
     }
   }
 }

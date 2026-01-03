@@ -1,0 +1,17 @@
+[package]
+name = "cue_test_helpers"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+assert_cmd = "2.0"
+assert_fs = "1.0"
+predicates = "3.0"
+tempfile = "3.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+# None - this is a test-only crate

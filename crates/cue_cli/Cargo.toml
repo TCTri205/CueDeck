@@ -33,6 +33,7 @@ serde_yaml.workspace = true
 self_update.workspace = true
 
 [dev-dependencies]
+cue_test_helpers = { path = "../cue_test_helpers" }
 assert_cmd.workspace = true
 predicates.workspace = true
 assert_fs.workspace = true

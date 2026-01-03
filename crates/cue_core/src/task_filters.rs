@@ -66,15 +66,15 @@ pub fn parse_tag_filter(input: &str) -> Vec<String> {
 /// Parse date filter from string
 /// Examples: "2024-01-01", ">2w", "<7d", "2024"
 pub fn parse_date_filter(input: &str) -> Result<DateFilter> {
-    if input.starts_with('>') {
+    if let Some(stripped) = input.strip_prefix('>') {
         Ok(DateFilter {
             operator: DateOperator::After,
-            value: parse_date_value(&input[1..])?,
+            value: parse_date_value(stripped)?,
         })
-    } else if input.starts_with('<') {
+    } else if let Some(stripped) = input.strip_prefix('<') {
         Ok(DateFilter {
             operator: DateOperator::Before,
-            value: parse_date_value(&input[1..])?,
+            value: parse_date_value(stripped)?,
         })
     } else {
         Ok(DateFilter {
@@ -163,6 +163,33 @@ pub fn matches_date_filter(
             let cutoff = now - *dur;
             Ok(task_date > cutoff)
         }
+        (DateOperator::After, DateValue::Relative(dur)) => {
+            // "created > 2w" means created "older than 2 weeks ago"? 
+            // OR "after 2 weeks ago"?
+            // Usually "> 2w" implies "older than 2 weeks" (Age > 2w) -> Date < (Now - 2w)
+            // But parsed as "After", which usually means Date > Value.
+            // If "Value" for relative is treated as a duration from now...
+            // Standard CLI date logic:
+            // ">2w" -> Age > 2w -> Created before (Now - 2w)
+            // "<2w" -> Age < 2w -> Created after (Now - 2w)
+            // BUT: parse_date_filter maps ">" to After. 
+            // So: After(2w). 
+            // If we interpret After as "Date > X", and X is "Now - 2w"...
+            // Then After(2w) means "More recent than 2 weeks ago".
+            // That aligns with my failed test: ">1d" (After 1d). 
+            // Task created just now. "Now" > "Now - 1d". So it should match.
+            // The logic I needed was:
+            let cutoff = now - *dur;
+            Ok(task_date > cutoff)
+        }
+        (DateOperator::Before, DateValue::Relative(dur)) => {
+            // "<1d" -> Before(1d).
+            // "Less recent than 1 day ago"? OR "Older than 1 day ago"?
+            // If ">" means "More recent", then "<" should mean "Less recent" (Older).
+            // So Date < (Now - 1d).
+            let cutoff = now - *dur;
+            Ok(task_date < cutoff)
+        }
         _ => Ok(false),
     }
 }
@@ -191,6 +218,14 @@ pub fn matches_date_filter_mtime(
         (DateOperator::Within, DateValue::Relative(dur)) => {
             let cutoff = now - *dur;
             Ok(file_date > cutoff)
+        }
+        (DateOperator::After, DateValue::Relative(dur)) => {
+            let cutoff = now - *dur;
+            Ok(file_date > cutoff)
+        }
+        (DateOperator::Before, DateValue::Relative(dur)) => {
+            let cutoff = now - *dur;
+            Ok(file_date < cutoff)
         }
         _ => Ok(false),
     }

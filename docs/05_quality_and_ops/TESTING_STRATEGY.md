@@ -86,6 +86,136 @@ async fn test_watcher_detects_change() {
 }
 ```
 
+## 4.5. Shared Test Utilities
+
+To reduce duplication and standardize test environments across all crates, CueDeck provides a dedicated `cue_test_helpers` crate with reusable testing utilities.
+
+### Overview
+
+The `cue_test_helpers` crate centralizes common testing patterns including:
+
+- **Workspace initialization**: TempDir-based test workspaces with `.cuedeck` structure
+- **CLI command builders**: Pre-configured commands with clean environments
+- **Logging control**: Suppress log pollution in test output
+- **Domain-specific assertions**: Custom predicates for CueDeck-specific validation
+
+### Usage
+
+```rust
+use cue_test_helpers::prelude::*;
+
+#[test]
+fn my_test() {
+    // Create a test workspace with .cuedeck structure
+    let workspace = init_workspace();
+    
+    // Use pre-configured command with RUST_LOG=error
+    let output = cue_command()
+        .current_dir(workspace.path())
+        .arg("list")
+        .assert()
+        .success();
+    
+    // Workspace auto-cleans on drop
+}
+```
+
+### Available Utilities
+
+#### Workspace Module (`workspace`)
+
+```rust
+use cue_test_helpers::workspace::*;
+
+// Create temp directory
+let temp = temp_dir();
+
+// Initialize CueDeck workspace with .cuedeck structure
+let workspace = init_workspace();
+
+// Create workspace with predefined task cards
+let cards = vec![
+    ("task1.md", "---\nid: abc123\n---\n# Task 1"),
+];
+let workspace = workspace_with_cards(&cards);
+
+// Create temporary markdown file
+let (_temp, path) = create_temp_md("# Content");
+```
+
+#### CLI Module (`cli`)
+
+```rust
+use cue_test_helpers::cli::*;
+
+// Get configured cue command (RUST_LOG=error preset)
+let cmd = cue_command();
+
+// Get command for specific binary
+let mcp_cmd = command_for("cue_mcp");
+```
+
+#### Logging Module (`logging`)
+
+```rust
+use cue_test_helpers::logging::*;
+
+// Initialize test logging with custom level
+init_test_logging("debug");
+
+// Suppress all logs for clean output
+suppress_logs();
+```
+
+#### Assertions Module (`assertions`)
+
+```rust
+use cue_test_helpers::assertions::*;
+
+// Assert stderr doesn't contain specific strings
+let predicate = stderr_not_contains(&["ERROR", "WARN"]);
+
+// Assert valid JSON-RPC response structure
+let predicate = valid_jsonrpc_response();
+
+// Assert contains task ID format
+let predicate = contains_task_id();
+```
+
+### Benefits
+
+1. **Consistency**: All tests use the same environment configuration
+2. **DRY principle**: No duplicate helper functions across test files
+3. **Log pollution prevention**: Centralized `RUST_LOG=error` configuration
+4. **Maintainability**: Update helpers once, applies to all tests
+5. **Discoverability**: Clear API in dedicated crate
+
+### Migration Example
+
+**Before** (inline helpers):
+
+```rust
+fn get_cue_command() -> Command {
+    let mut cmd = Command::cargo_bin("cue").unwrap();
+    cmd.env("RUST_LOG", "error");
+    cmd
+}
+
+fn setup_workspace() -> TempDir {
+    let temp = TempDir::new().unwrap();
+    // ... initialization code ...
+    temp
+}
+```
+
+**After** (using helpers):
+
+```rust
+use cue_test_helpers::prelude::*;
+
+// Just use init_workspace() and cue_command() directly
+```
+
 ## 5. CI/CD Pipeline (GitHub Actions)
 
 **File**: `.github/workflows/ci.yml`

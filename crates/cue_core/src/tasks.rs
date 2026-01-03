@@ -399,7 +399,7 @@ pub fn list_tasks_filtered(
 
                         // Priority filter
                         if let Some(priority) = &filters.priority {
-                            if &meta.priority.to_lowercase() != &priority.to_lowercase() {
+                            if meta.priority.to_lowercase() != priority.to_lowercase() {
                                 continue;
                             }
                         }

@@ -32,6 +32,7 @@ lazy_static.workspace = true
 base64 = "0.22"
 
 [dev-dependencies]
+cue_test_helpers = { path = "../cue_test_helpers" }
 assert_fs.workspace = true
 predicates.workspace = true
 criterion = { version = "0.5", features = ["html_reports"] }
