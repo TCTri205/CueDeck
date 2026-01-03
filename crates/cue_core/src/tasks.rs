@@ -1,4 +1,5 @@
 use crate::parse_file;
+use crate::task_filters::{matches_date_filter, matches_date_filter_mtime, matches_tag_filter, TaskFilters};
 use cue_common::{CueError, Document, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -259,6 +260,13 @@ pub fn update_task(
                 };
                 map.insert(serde_yaml::Value::String(k), yaml_v);
             }
+            
+            // Auto-set 'updated' timestamp
+            let updated_str = chrono::Utc::now().to_rfc3339();
+            map.insert(
+                serde_yaml::Value::String("updated".to_string()),
+                serde_yaml::Value::String(updated_str),
+            );
         }
 
         let new_yaml =
@@ -352,3 +360,108 @@ pub fn get_task_dependents(
         })
         .collect())
 }
+
+/// List all task cards with advanced filtering
+#[tracing::instrument(skip(workspace_root))]
+pub fn list_tasks_filtered(
+    workspace_root: &Path,
+    filters: &TaskFilters,
+) -> Result<Vec<Document>> {
+    let cards_dir = workspace_root.join(".cuedeck/cards");
+    let mut tasks = Vec::new();
+
+    if !cards_dir.exists() {
+        return Ok(tasks);
+    }
+
+    for entry in walkdir::WalkDir::new(&cards_dir)
+        .max_depth(1)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        if entry.file_type().is_file() && entry.path().extension().is_some_and(|e| e == "md") {
+            match parse_file(entry.path()) {
+                Ok(doc) => {
+                    if let Some(meta) = &doc.frontmatter {
+                        // Status filter
+                        if let Some(status) = &filters.status {
+                            if &meta.status != status {
+                                continue;
+                            }
+                        }
+
+                        // Assignee filter
+                        if let Some(assignee) = &filters.assignee {
+                            if meta.assignee.as_deref() != Some(assignee.as_str()) {
+                                continue;
+                            }
+                        }
+
+                        // Priority filter
+                        if let Some(priority) = &filters.priority {
+                            if &meta.priority.to_lowercase() != &priority.to_lowercase() {
+                                continue;
+                            }
+                        }
+
+                        // Tags filter (OR logic)
+                        if let Some(tag_list) = &filters.tags {
+                            if !matches_tag_filter(&meta.tags, tag_list) {
+                                continue;
+                            }
+                        }
+
+                        // Created date filter
+                        if let Some(date_filter) = &filters.created {
+                            if !matches_date_filter(&meta.created, date_filter)? {
+                                continue;
+                            }
+                        }
+
+                        // Updated date filter
+                        if let Some(date_filter) = &filters.updated {
+                            // First try 'updated' field, fallback to file mtime
+                            let matches = if meta.updated.is_some() {
+                                matches_date_filter(&meta.updated, date_filter)?
+                            } else {
+                                // Fallback to file modification time
+                                match entry.metadata() {
+                                    Ok(metadata) => match metadata.modified() {
+                                        Ok(mtime) => matches_date_filter_mtime(&mtime, date_filter)?,
+                                        Err(_) => false,
+                                    },
+                                    Err(_) => false,
+                                }
+                            };
+                            
+                            if !matches {
+                                continue;
+                            }
+                        }
+
+                        tasks.push(doc);
+                    }
+                }
+                Err(e) => tracing::warn!("Failed to parse card {:?}: {}", entry.path(), e),
+            }
+        }
+    }
+
+    // Sort by priority then created (existing logic)
+    tasks.sort_by(|a, b| {
+        let p_a = a
+            .frontmatter
+            .as_ref()
+            .map(|m| priority_score(&m.priority))
+            .unwrap_or(0);
+        let p_b = b
+            .frontmatter
+            .as_ref()
+            .map(|m| priority_score(&m.priority))
+            .unwrap_or(0);
+        p_b.cmp(&p_a) // Higher priority first
+    });
+
+    Ok(tasks)
+}
+

@@ -85,6 +85,11 @@ pub struct CardMetadata {
     #[serde(default)]
     pub created: Option<String>,
 
+    /// Last updated timestamp (ISO 8601)
+    /// Automatically set by update_task() or manual edits
+    #[serde(default)]
+    pub updated: Option<String>,
+
     /// Task IDs this task depends on
     #[serde(default)]
     pub depends_on: Option<Vec<String>>,

@@ -216,10 +216,39 @@ Manage implementation tasks.
 
 ### `cue list`
 
-Alias for `cue card list`. Lists all cards.
+Lists all task cards with powerful filtering capabilities.
 
 - **Flags**:
-  - `--status=<active|archived|all>`: Filter by status (default: active).
+  - `--status=<active|done|archived|all>`: Filter by status (default: `active`)
+  - `--tags=<TAGS>`: Filter by tags (comma-separated, OR logic)
+    - Example: `--tags auth,api` matches cards with ANY of these tags
+  - `--priority=<critical|high|medium|low>`: Filter by priority
+  - `--assignee=<@username>`: Filter by assignee
+  - `--created=<DATE>`: Filter by creation date
+    - Formats: `YYYY`, `YYYY-MM`, `YYYY-MM-DD`, `>2w`, `<7d`
+    - Examples: `--created 2024` (created in 2024), `--created>30d` (last 30 days)
+  - `--updated=<DATE>`: Filter by last update
+    - Same formats as `--created`
+    - Uses metadata `updated` field if available, falls back to file modification time
+
+- **Examples**:
+
+  ```bash
+  # Recent high-priority tasks
+  cue list --priority high --created>30d
+  
+  # Auth-related tasks (OR logic)
+  cue list --tags auth,api
+  
+  # Tasks created in 2024
+  cue list --created 2024
+  
+  # Recently updated tasks
+  cue list --updated>2w
+  
+  # Combined filters
+  cue list --status active --priority high --tags backend
+  ```
 
 ### `cue clean`
 

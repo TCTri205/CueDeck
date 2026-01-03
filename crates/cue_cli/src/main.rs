@@ -89,9 +89,29 @@ enum Commands {
 
     /// List all cards (alias for 'card list')
     List {
-        /// Filter by status
+        /// Filter by status (active, done, archived, all)
         #[arg(long, default_value = "active")]
         status: String,
+
+        /// Filter by tags (comma-separated, OR logic)
+        #[arg(long, value_delimiter = ',')]
+        tags: Option<Vec<String>>,
+
+        /// Filter by priority (critical, high, medium, low)
+        #[arg(long)]
+        priority: Option<String>,
+
+        /// Filter by assignee (e.g., @username)
+        #[arg(long)]
+        assignee: Option<String>,
+
+        /// Filter by created date (YYYY, YYYY-MM, YYYY-MM-DD, >2w, <7d)
+        #[arg(long)]
+        created: Option<String>,
+
+        /// Filter by updated date (YYYY, YYYY-MM, YYYY-MM-DD, >2w, <7d)
+        #[arg(long)]
+        updated: Option<String>,
     },
 
     /// Hard reset of cache
@@ -234,7 +254,8 @@ async fn main() {
 
         Commands::Doctor { repair, json, normalize_tags } => cmd_doctor(repair, json, normalize_tags).await,
         Commands::Card { action } => cmd_card(action).await,
-        Commands::List { status } => cmd_list(status).await,
+        Commands::List { status, tags, priority, assignee, created, updated } => 
+            cmd_list(status, tags, priority, assignee, created, updated).await,
         Commands::Clean { logs } => cmd_clean(logs).await,
         Commands::Logs { action } => cmd_logs(action).await,
         Commands::Upgrade => cmd_upgrade().await,
@@ -813,7 +834,7 @@ async fn cmd_card(action: CardAction) -> anyhow::Result<()> {
         }
 
         CardAction::List { status } => {
-            cmd_list(status).await?;
+            cmd_list(status, None, None, None, None, None).await?;
         }
 
         CardAction::Edit { id } => {
@@ -844,19 +865,61 @@ async fn cmd_card(action: CardAction) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn cmd_list(status: String) -> anyhow::Result<()> {
+async fn cmd_list(
+    status: String,
+    tags: Option<Vec<String>>,
+    priority: Option<String>,
+    assignee: Option<String>,
+    created: Option<String>,
+    updated: Option<String>,
+) -> anyhow::Result<()> {
+    use cue_core::task_filters::{parse_date_filter, TaskFilters};
+
     let cwd = std::env::current_dir()?;
 
-    // Convert CLI status "all" to None for filter
-    let status_filter = if status == "all" {
-        None
-    } else {
-        Some(status.as_str())
-    };
+    // Build filters
+    let mut filters = TaskFilters::default();
 
-    let tasks = cue_core::tasks::list_tasks(&cwd, status_filter, None)?;
+    // Status filter
+    if status != "all" {
+        filters.status = Some(status.clone());
+    }
 
-    eprintln!("Cards (status={}):", status);
+    // Tags filter
+    filters.tags = tags;
+
+    // Priority filter
+    filters.priority = priority.clone();
+
+    // Assignee filter
+    filters.assignee = assignee.clone();
+
+    // Created date filter
+    if let Some(created_str) = created {
+        filters.created = Some(parse_date_filter(&created_str)?);
+    }
+
+    // Updated date filter
+    if let Some(updated_str) = updated {
+        filters.updated = Some(parse_date_filter(&updated_str)?);
+    }
+
+    // Use new filtered function
+    let tasks = cue_core::tasks::list_tasks_filtered(&cwd, &filters)?;
+
+    // Display filter info
+    let mut filter_parts = vec![format!("status={}", status)];
+    if let Some(ref t) = filters.tags {
+        filter_parts.push(format!("tags={}", t.join(",")));
+    }
+    if let Some(ref p) = priority {
+        filter_parts.push(format!("priority={}", p));
+    }
+    if let Some(ref a) = assignee {
+        filter_parts.push(format!("assignee={}", a));
+    }
+
+    eprintln!("Cards ({}):", filter_parts.join(", "));
     eprintln!(
         "{:<10} {:<30} {:<15} {:<10}",
         "ID", "Title", "Status", "Priority"
@@ -878,6 +941,7 @@ async fn cmd_list(status: String) -> anyhow::Result<()> {
             priority: "medium".to_string(),
             tags: None,
             created: None,
+            updated: None,
             depends_on: None,
         });
 

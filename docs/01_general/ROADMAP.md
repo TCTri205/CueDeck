@@ -16,8 +16,8 @@ gantt
     Phase 5 (Semantic Search)  :done, p5, 2026-01-02, 1d
     Benchmarking Suite         :done, b1, 2026-01-02, 1d
     section Q1 2026
-    Documentation Updates      :active, d1, 2026-01-02, 1d
-    Advanced Search Filters    :q1, after d1, 3d
+    Documentation Updates      :done, d1, 2026-01-02, 1d
+    Advanced Search Filters    :done, asf, 2026-01-03, 2d
     section Q2 2026
     Phase 6 (Cloud Sync)       :p6, 2026-04-01, 4w
     section Q3 2026

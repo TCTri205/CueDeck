@@ -10,16 +10,22 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub mod cache;
-pub mod context;
 pub mod consistency;
+pub mod context;
 pub mod doctor;
 pub mod embedding_cache;
 pub mod embeddings;
 pub mod engine;
 pub mod graph;
 pub mod graph_viz;
+pub mod task_filters;
 pub mod task_graph;
 pub mod tasks;
+
+// Re-exports
+pub use context::search_workspace;
+pub use graph::DependencyGraph;
+pub use task_filters::{TaskFilters, DateFilter, DateOperator, DateValue};
 
 // Re-export commonly used functions
 pub use context::save_embedding_cache;
