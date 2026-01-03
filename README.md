@@ -147,13 +147,13 @@ CueDeck/
 
 ## 📖 Documentation
 
-See the [docs/](./docs/) directory for comprehensive documentation:
+See the [docs/](./docs/00_INDEX.md) directory for comprehensive documentation:
 
 - **General**: [00_INDEX.md](./docs/00_INDEX.md)
-- **Architecture**: [docs/02_architecture/](./docs/02_architecture/)
-- **Agent Design**: [docs/03_agent_design/](./docs/03_agent_design/)
-- **Tools & API**: [docs/04_tools_and_data/](./docs/04_tools_and_data/)
-- **Quality & Ops**: [docs/05_quality_and_ops/](./docs/05_quality_and_ops/)
+- **Architecture**: [docs/02_architecture/](./docs/02_architecture/SYSTEM_ARCHITECTURE.md)
+- **Agent Design**: [docs/03_agent_design/](./docs/03_agent_design/AGENT_PERSONA.md)
+- **Tools & API**: [docs/04_tools_and_data/](./docs/04_tools_and_data/CLI_REFERENCE.md)
+- **Quality & Ops**: [docs/05_quality_and_ops/](./docs/05_quality_and_ops/TESTING_STRATEGY.md)
 
 ## 🛠️ Troubleshooting
 

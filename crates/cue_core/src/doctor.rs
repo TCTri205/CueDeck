@@ -73,7 +73,13 @@ pub fn run_diagnostics(workspace_root: &Path) -> Result<DoctorReport> {
     // Check 3: Card frontmatter
     checks.push(check_card_frontmatter(workspace_root));
 
-    // Check 4: Task graph validation
+    // Check 4: Link Integrity (Consistency)
+    checks.extend(crate::consistency::check_link_integrity(workspace_root)?);
+
+    // Check 5: Metadata Consistency
+    checks.extend(crate::consistency::check_metadata_consistency(workspace_root)?);
+
+    // Check 6: Task graph validation
     checks.extend(check_task_graph(workspace_root)?);
 
     let healthy = checks.iter().all(|c| c.status == CheckStatus::Pass);
@@ -337,7 +343,7 @@ fn gather_workspace_stats(workspace_root: &Path) -> Result<WorkspaceStats> {
 }
 
 /// Run automatic repairs for fixable issues
-pub fn run_repairs(workspace_root: &Path, report: &DoctorReport) -> Result<RepairReport> {
+pub fn run_repairs(workspace_root: &Path, report: &DoctorReport, normalize_tags: bool) -> Result<RepairReport> {
     let mut results = Vec::new();
 
     for check in &report.checks {
@@ -350,6 +356,7 @@ pub fn run_repairs(workspace_root: &Path, report: &DoctorReport) -> Result<Repai
         let result = match check.name.as_str() {
             "Workspace Structure" => repair_workspace_structure(workspace_root),
             "Config File" => repair_config_file(workspace_root),
+            "Metadata Consistency" => crate::consistency::repair_metadata(workspace_root, check, normalize_tags),
             _ => continue, // Skip non-repairable checks
         };
 
@@ -569,7 +576,7 @@ mod tests {
         };
 
         // Run repairs
-        let result = run_repairs(root, &report).unwrap();
+        let result = run_repairs(root, &report, false).unwrap();
 
         // Verify only fixable issue was attempted
         assert_eq!(result.total_attempted, 1);

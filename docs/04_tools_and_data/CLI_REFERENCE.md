@@ -120,7 +120,7 @@ Starts the monitoring daemon.
 
 ### `cue doctor`
 
-Diagnoses workspace issues using the `miette` library for beautiful error reporting.
+Diagnoses and automatically repairs workspace issues.
 
 - **Checks**:
   - [x] Config Syntax — Valid TOML structure
@@ -128,14 +128,38 @@ Diagnoses workspace issues using the `miette` library for beautiful error report
   - [x] Path Validity — Checks all reference paths exist
   - [x] Dead Links — Detects references to non-existent files or anchors
   - [x] Circular Dependencies — Uses graph algorithm (DFS/Tarjan's) to detect cycles
-  - [x] Orphan Tasks — Warns about active cards with no assignee
+  - [x] Orphaned Tasks — Warns about isolated tasks with no dependencies or dependents
+  - [x] Metadata Consistency — Validates timestamps and other metadata semantics
+  
+  **Link Integrity Details**:
+  - ✅ **Ignores**: `http://`, `https://`, `mailto:`, `ftp://`, `file://` URIs (external & IDE links)
+  - ✅ **Checks**: Relative file paths (`./doc.md`, `../README.md`), anchor links (`#heading`, `doc.md#section`)
+  - ❌ **Reports as broken**: Missing files, invalid anchors, unresolvable paths
+
 - **Flags**:
   - `--repair`: Attempt automatic fixes for detected issues.
+  - `--normalize-tags`: Normalize all tags to lowercase during repair (requires `--repair`).
   - `--json`: Output results as JSON (machine-readable).
-  - `--format=<text|json>`: Specify output format (default: text).
+
+- **Repair Capabilities**:
+  - **Auto-Fixable**:
+    - Missing workspace directories (`.cuedeck/`, `cards/`, `context/`, `cache/`)
+    - Missing keys or file for `config.toml` (creates default template)
+    - Invalid timestamps in metadata (converts to ISO 8601)
+    - Tag normalization (with `--normalize-tags` flag): converts tags to lowercase
+  - **Manual Intervention Required**:
+    - Invalid YAML frontmatter (needs user intent)
+    - Circular dependencies (needs logic resolution)
+    - Broken links / paths (needs correct target)
+
+- **Workflow**:
+  1. **Diagnose**: Runs full health check suite.
+  2. **Repair**: If `--repair` is set, attempts to fix auto-fixable issues.
+  3. **Verify**: Re-runs diagnostics to confirm fixes and report remaining issues.
+
 - **Exit Code**:
-  - `0`: All clear.
-  - `1`: Issues found.
+  - `0`: All clear (or all issues successfully repaired).
+  - `1`: Issues found / Repair incomplete.
 
 ### `cue graph`
 

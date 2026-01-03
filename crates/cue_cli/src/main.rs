@@ -75,6 +75,10 @@ enum Commands {
         /// Output results as JSON
         #[arg(long)]
         json: bool,
+
+        /// Normalize tags to lowercase during repair
+        #[arg(long)]
+        normalize_tags: bool,
     },
 
     /// Manage implementation tasks
@@ -228,7 +232,7 @@ async fn main() {
 
         Commands::Watch => cmd_watch().await,
 
-        Commands::Doctor { repair, json } => cmd_doctor(repair, json).await,
+        Commands::Doctor { repair, json, normalize_tags } => cmd_doctor(repair, json, normalize_tags).await,
         Commands::Card { action } => cmd_card(action).await,
         Commands::List { status } => cmd_list(status).await,
         Commands::Clean { logs } => cmd_clean(logs).await,
@@ -469,7 +473,7 @@ async fn cmd_open(
     Ok(())
 }
 
-async fn cmd_doctor(repair: bool, json: bool) -> anyhow::Result<()> {
+async fn cmd_doctor(repair: bool, json: bool, normalize_tags: bool) -> anyhow::Result<()> {
     use cue_core::doctor::{run_diagnostics, run_repairs, CheckStatus};
 
     let cwd = std::env::current_dir()?;
@@ -530,7 +534,7 @@ async fn cmd_doctor(repair: bool, json: bool) -> anyhow::Result<()> {
             eprintln!("\n🔧 Attempting automatic repairs...\n");
         }
 
-        let repair_report = run_repairs(&cwd, &report)?;
+        let repair_report = run_repairs(&cwd, &report, normalize_tags)?;
 
         // Display repair results
         if !json {

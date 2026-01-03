@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 
 pub mod cache;
 pub mod context;
+pub mod consistency;
 pub mod doctor;
 pub mod embedding_cache;
 pub mod embeddings;

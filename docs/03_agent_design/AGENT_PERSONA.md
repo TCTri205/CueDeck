@@ -91,8 +91,8 @@ max_delay = 8 seconds
 - **Status**: [active/done/todo]
 - **Priority**: [high/medium/low]
 - **Key Context**:
-  - [doc/auth.md#LoginFlow](Anchor Link)
-  - [crates/cue_core/src/auth.rs](Source Code)
+  - `doc/auth.md#LoginFlow` (Anchor Link)
+  - `crates/cue_core/src/auth.rs` (Source Code)
 - **Notes**: [User-provided notes or recent changes]
 ```
 
