@@ -551,7 +551,8 @@ graph LR
 | **ADR-005** | Greedy Knapsack | Fast (<1ms), good enough (85-95% optimal) |
 | **ADR-006** | Hybrid Database (JSON + SQLite) | **Performance (24x faster), scalability (10K+ files)** |
 | **ADR-007** | Client-to-Cloud Sync | **Privacy ($0 cost), aligns with local-first** |
+| **ADR-008** | CRDT P2P Sync | **Real-time collaboration, offline-capable, deterministic merging** |
 
 ---
 
-**Related Docs**: [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md), [SYSTEM_ARCHITECTURE.md](../02_architecture/SYSTEM_ARCHITECTURE.md), [ALGORITHMS.md](../02_architecture/ALGORITHMS.md)
+**Related Docs**: [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md), [SYSTEM_ARCHITECTURE.md](../02_architecture/SYSTEM_ARCHITECTURE.md), [ALGORITHMS.md](../02_architecture/ALGORITHMS.md), [ADR-008_P2P_SYNC.md](./ADR-008_P2P_SYNC.md)

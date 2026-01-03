@@ -1,0 +1,88 @@
+{
+  "name": "cuedeck",
+  "displayName": "CueDeck",
+  "description": "AI-native knowledge graph for markdown workspaces",
+  "version": "0.1.0",
+  "publisher": "cuedeck",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cuedeck/cuedeck"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:.cuedeck/config.toml",
+    "onCommand:cuedeck.search",
+    "onCommand:cuedeck.graphView",
+    "onView:cuedeckTasks"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "cuedeck.search",
+        "title": "CueDeck: Search Documents"
+      },
+      {
+        "command": "cuedeck.graphView",
+        "title": "CueDeck: Open Graph View"
+      },
+      {
+        "command": "cuedeck.refreshTasks",
+        "title": "CueDeck: Refresh Tasks"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cuedeck",
+          "title": "CueDeck",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "cuedeck": [
+        {
+          "id": "cuedeckTasks",
+          "name": "Tasks"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CueDeck",
+      "properties": {
+        "cuedeck.cliPath": {
+          "type": "string",
+          "default": "cue",
+          "description": "Path to CueDeck CLI binary"
+        },
+        "cuedeck.enableSync": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable real-time sync with team members"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "@vscode/test-electron": "^2.3.8",
+    "vsce": "^2.15.0"
+  },
+  "dependencies": {}
+}

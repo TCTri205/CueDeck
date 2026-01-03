@@ -112,6 +112,10 @@ enum Commands {
         /// Filter by updated date (YYYY, YYYY-MM, YYYY-MM-DD, >2w, <7d)
         #[arg(long)]
         updated: Option<String>,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
     },
 
     /// Hard reset of cache
@@ -133,6 +137,36 @@ enum Commands {
     /// Start MCP server (JSON-RPC over stdio)
     Mcp,
 
+    /// Search documents (non-interactive, for tool integration)
+    Search {
+        /// Search query
+        query: String,
+
+        /// Search mode: keyword, semantic, or hybrid (default)
+        #[arg(long, default_value = "hybrid")]
+        mode: String,
+
+        /// Filter by tags (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        tags: Option<Vec<String>>,
+
+        /// Filter by priority
+        #[arg(long)]
+        priority: Option<String>,
+
+        /// Filter by assignee
+        #[arg(long)]
+        assignee: Option<String>,
+
+        /// Output results as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Maximum number of results
+        #[arg(long, default_value = "10")]
+        limit: usize,
+    },
+
     /// Visualize dependency graph
     Graph {
         /// Output format
@@ -146,6 +180,10 @@ enum Commands {
         /// Show graph statistics
         #[arg(long)]
         stats: bool,
+
+        /// Output as JSON (for tool integration)
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -254,23 +292,52 @@ async fn main() {
 
         Commands::Doctor { repair, json, normalize_tags } => cmd_doctor(repair, json, normalize_tags).await,
         Commands::Card { action } => cmd_card(action).await,
-        Commands::List { status, tags, priority, assignee, created, updated } => 
-            cmd_list(status, tags, priority, assignee, created, updated).await,
+        Commands::List { status, tags, priority, assignee, created, updated, json } => 
+            cmd_list(status, tags, priority, assignee, created, updated, json).await,
         Commands::Clean { logs } => cmd_clean(logs).await,
         Commands::Logs { action } => cmd_logs(action).await,
         Commands::Upgrade => cmd_upgrade().await,
         Commands::Mcp => cmd_mcp().await,
+        Commands::Search {
+            query,
+            mode,
+            tags,
+            priority,
+            assignee,
+            json,
+            limit,
+        } => cmd_search(query, mode, tags, priority, assignee, json, limit).await,
         Commands::Graph {
             format,
             output,
             stats,
-        } => cmd_graph(format, output, stats).await,
+            json,
+        } => cmd_graph(format, output, stats, json).await,
     };
 
     if let Err(e) = result {
         eprintln!("Error: {}", e);
         std::process::exit(EXIT_ERROR);
     }
+}
+
+//
+// Helper functions
+//
+
+/// Print error as JSON for tool integration
+fn print_json_error(error: &anyhow::Error, code: &str) {
+    use serde_json::json;
+    
+    let json_error = json!({
+        "success": false,
+        "error": {
+            "code": code,
+            "message": error.to_string(),
+        }
+    });
+    
+    println!("{}", serde_json::to_string_pretty(&json_error).unwrap());
 }
 
 //
@@ -458,29 +525,29 @@ async fn cmd_open(
         SearchMode::Keyword => eprintln!("🔍 Using keyword search..."),
     }
 
-    let docs = search_workspace_with_mode(&cwd, &query_str, search_mode, filters)?;
+    let scored_results = search_workspace_with_mode(&cwd, &query_str, search_mode, filters)?;
 
-    if docs.is_empty() {
+    if scored_results.is_empty() {
         eprintln!("No results found for query: '{}'", query_str);
         return Ok(());
     }
 
-    // Display numbered list
+    // Display numbered list with scores
     eprintln!("Select a file:");
-    for (i, doc) in docs.iter().enumerate() {
-        eprintln!("  {}. {}", i + 1, doc.path.display());
+    for (i, result) in scored_results.iter().enumerate() {
+        eprintln!("  {}. [{:.2}] {}", i + 1, result.score, result.document.path.display());
     }
 
     // Get user input
-    eprint!("\nEnter number (1-{}): ", docs.len());
+    eprint!("\nEnter number (1-{}): ", scored_results.len());
     io::stderr().flush()?;
 
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
 
     if let Ok(choice) = input.trim().parse::<usize>() {
-        if choice > 0 && choice <= docs.len() {
-            let path = &docs[choice - 1].path;
+        if choice > 0 && choice <= scored_results.len() {
+            let path = &scored_results[choice - 1].document.path;
             let editor = std::env::var("EDITOR").unwrap_or_else(|_| "notepad".to_string());
 
             std::process::Command::new(&editor).arg(path).status()?;
@@ -489,6 +556,87 @@ async fn cmd_open(
         }
     } else {
         eprintln!("Invalid input");
+    }
+
+    Ok(())
+}
+
+async fn cmd_search(
+    query: String,
+    mode: String,
+    tags: Option<Vec<String>>,
+    priority: Option<String>,
+    assignee: Option<String>,
+    json: bool,
+    limit: usize,
+) -> anyhow::Result<()> {
+    use cue_core::context::{search_workspace_with_mode, SearchFilters, SearchMode};
+    use serde_json::json;
+
+    let cwd = match std::env::current_dir() {
+        Ok(dir) => dir,
+        Err(e) if json => {
+            print_json_error(&e.into(), "CWD_ERROR");
+            return Ok(());
+        }
+        Err(e) => return Err(e.into()),
+    };
+
+    let search_mode = SearchMode::parse(&mode);
+
+    let filters = if tags.is_some() || priority.is_some() || assignee.is_some() {
+        Some(SearchFilters {
+            tags,
+            priority,
+            assignee,
+        })
+    } else {
+        None
+    };
+
+    let scored_results = match search_workspace_with_mode(&cwd, &query, search_mode, filters) {
+        Ok(results) => results,
+        Err(e) if json => {
+            print_json_error(&e.into(), "SEARCH_FAILED");
+            return Ok(());
+        }
+        Err(e) => return Err(e.into()),
+    };
+
+    let results: Vec<_> = scored_results.into_iter().take(limit).collect();
+
+    if json {
+        // JSON output for VSCode extension with real scores
+        let json_results: Vec<_> = results
+            .iter()
+            .map(|result| {
+                let preview = if let Some(ref fm) = result.document.frontmatter {
+                    fm.title.clone()
+                } else {
+                    result.document.path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("")
+                        .to_string()
+                };
+                json!({
+                    "path": result.document.path.display().to_string(),
+                    "score": format!("{:.2}", result.score), // ✅ Real calculated score
+                    "preview": preview,
+                })
+            })
+            .collect();
+        
+        println!("{}", serde_json::to_string_pretty(&json_results)?);
+    } else {
+        // Human-readable output with scores
+        eprintln!("Found {} results:", results.len());
+        for (i, result) in results.iter().enumerate() {
+            eprintln!("{}. [{:.2}] {}", 
+                i + 1, 
+                result.score, 
+                result.document.path.display()
+            );
+        }
     }
 
     Ok(())
@@ -834,7 +982,7 @@ async fn cmd_card(action: CardAction) -> anyhow::Result<()> {
         }
 
         CardAction::List { status } => {
-            cmd_list(status, None, None, None, None, None).await?;
+            cmd_list(status, None, None, None, None, None, false).await?;
         }
 
         CardAction::Edit { id } => {
@@ -872,10 +1020,18 @@ async fn cmd_list(
     assignee: Option<String>,
     created: Option<String>,
     updated: Option<String>,
+    json: bool, // ✅ Remove underscore - no longer a stub
 ) -> anyhow::Result<()> {
     use cue_core::task_filters::{parse_date_filter, TaskFilters};
 
-    let cwd = std::env::current_dir()?;
+    let cwd = match std::env::current_dir() {
+        Ok(dir) => dir,
+        Err(e) if json => {
+            print_json_error(&e.into(), "CWD_ERROR");
+            return Ok(());
+        }
+        Err(e) => return Err(e.into()),
+    };
 
     // Build filters
     let mut filters = TaskFilters::default();
@@ -896,62 +1052,118 @@ async fn cmd_list(
 
     // Created date filter
     if let Some(created_str) = created {
-        filters.created = Some(parse_date_filter(&created_str)?);
+        filters.created = match parse_date_filter(&created_str) {
+            Ok(f) => Some(f),
+            Err(e) if json => {
+                print_json_error(&e.into(), "INVALID_DATE_FILTER");
+                return Ok(());
+            }
+            Err(e) => return Err(e.into()),
+        };
     }
 
     // Updated date filter
     if let Some(updated_str) = updated {
-        filters.updated = Some(parse_date_filter(&updated_str)?);
+        filters.updated = match parse_date_filter(&updated_str) {
+            Ok(f) => Some(f),
+            Err(e) if json => {
+                print_json_error(&e.into(), "INVALID_DATE_FILTER");
+                return Ok(());
+            }
+            Err(e) => return Err(e.into()),
+        };
     }
 
     // Use new filtered function
-    let tasks = cue_core::tasks::list_tasks_filtered(&cwd, &filters)?;
+    let tasks = match cue_core::tasks::list_tasks_filtered(&cwd, &filters) {
+        Ok(t) => t,
+        Err(e) if json => {
+            print_json_error(&e.into(), "LIST_FAILED");
+            return Ok(());
+        }
+        Err(e) => return Err(e.into()),
+    };
 
-    // Display filter info
-    let mut filter_parts = vec![format!("status={}", status)];
-    if let Some(ref t) = filters.tags {
-        filter_parts.push(format!("tags={}", t.join(",")));
-    }
-    if let Some(ref p) = priority {
-        filter_parts.push(format!("priority={}", p));
-    }
-    if let Some(ref a) = assignee {
-        filter_parts.push(format!("assignee={}", a));
-    }
+    if json {
+        // ✅ JSON output for VSCode extension
+        use serde_json::json;
+        
+        let json_tasks: Vec<_> = tasks
+            .iter()
+            .map(|doc| {
+                let id = doc.path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
 
-    eprintln!("Cards ({}):", filter_parts.join(", "));
-    eprintln!(
-        "{:<10} {:<30} {:<15} {:<10}",
-        "ID", "Title", "Status", "Priority"
-    );
-    eprintln!("{}", "-".repeat(70));
+                let meta = doc.frontmatter.as_ref();
+                
+                json!({
+                    "id": id,
+                    "title": meta.map(|m| m.title.as_str()).unwrap_or("Untitled"),
+                    "status": meta.map(|m| m.status.as_str()).unwrap_or("unknown"),
+                    "priority": meta.map(|m| m.priority.as_str()).unwrap_or("medium"),
+                    "assignee": meta.and_then(|m| m.assignee.as_deref()),
+                    "tags": meta.and_then(|m| m.tags.as_ref()),
+                    "file": doc.path.display().to_string(),
+                    "line": 1, // Frontmatter is always at line 1
+                    "created": meta.and_then(|m| m.created.as_ref()),
+                    "updated": meta.and_then(|m| m.updated.as_ref()),
+                    "dependsOn": meta.and_then(|m| m.depends_on.as_ref()),
+                })
+            })
+            .collect();
 
-    for doc in tasks {
-        // ID from filename
-        let id = doc
-            .path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown");
+        println!("{}", serde_json::to_string_pretty(&json_tasks)?);
+    } else {
+        // Human-readable output
+        // Display filter info
+        let mut filter_parts = vec![format!("status={}", status)];
+        if let Some(ref t) = filters.tags {
+            filter_parts.push(format!("tags={}", t.join(",")));
+        }
+        if let Some(ref p) = priority {
+            filter_parts.push(format!("priority={}", p));
+        }
+        if let Some(ref a) = assignee {
+            filter_parts.push(format!("assignee={}", a));
+        }
 
-        let meta = doc.frontmatter.unwrap_or(cue_common::CardMetadata {
-            title: "Untitled".to_string(),
-            status: "unknown".to_string(),
-            assignee: None,
-            priority: "medium".to_string(),
-            tags: None,
-            created: None,
-            updated: None,
-            depends_on: None,
-        });
-
+        eprintln!("Cards ({}):", filter_parts.join(", "));
         eprintln!(
             "{:<10} {:<30} {:<15} {:<10}",
-            id,
-            truncate(&meta.title, 28),
-            meta.status,
-            meta.priority
+            "ID", "Title", "Status", "Priority"
         );
+        eprintln!("{}", "-".repeat(70));
+
+        for doc in tasks {
+            // ID from filename
+            let id = doc
+                .path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown");
+
+            let meta = doc.frontmatter.unwrap_or(cue_common::CardMetadata {
+                title: "Untitled".to_string(),
+                status: "unknown".to_string(),
+                assignee: None,
+                priority: "medium".to_string(),
+                tags: None,
+                created: None,
+                updated: None,
+                depends_on: None,
+            });
+
+            eprintln!(
+                "{:<10} {:<30} {:<15} {:<10}",
+                id,
+                truncate(&meta.title, 28),
+                meta.status,
+                meta.priority
+            );
+        }
     }
 
     Ok(())
@@ -1213,9 +1425,8 @@ async fn cmd_watch() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn cmd_graph(format: String, output: Option<String>, stats: bool) -> anyhow::Result<()> {
+async fn cmd_graph(format: String, output: Option<String>, stats: bool, json: bool) -> anyhow::Result<()> {
     use cue_core::graph::DependencyGraph;
-    use cue_core::graph_viz::{render, GraphFormat};
     use std::fs;
 
     let cwd = std::env::current_dir()?;
@@ -1250,53 +1461,76 @@ async fn cmd_graph(format: String, output: Option<String>, stats: bool) -> anyho
     }
 
     // Build dependency graph
-    let graph = DependencyGraph::build(&all_docs)?;
+    let graph = match DependencyGraph::build(&all_docs) {
+        Ok(g) => g,
+        Err(e) if json => {
+            print_json_error(&e.into(), "GRAPH_BUILD_FAILED");
+            return Ok(());
+        }
+        Err(e) => return Err(e.into()),
+    };
 
-    // Show statistics if requested
-    if stats {
-        let graph_stats = graph.stats();
-        eprintln!("Graph Statistics:");
-        eprintln!("  Nodes: {}", graph_stats.node_count);
-        eprintln!("  Edges: {}", graph_stats.edge_count);
-        eprintln!(
-            "  Cycles: {}",
-            if graph_stats.has_cycles { "Yes" } else { "No" }
-        );
+    if json {
+        // ✅ JSON export for VSCode extension
+        let export = graph.to_json_export();
+        let json_str = serde_json::to_string_pretty(&export)?;
+        
+        if let Some(output_path) = output {
+            fs::write(&output_path, &json_str)?;
+            eprintln!("✓ Graph JSON written to {}", output_path);
+        } else {
+            println!("{}", json_str);
+        }
+    } else {
+        // Existing visualization rendering
+        // Show statistics if requested
+        if stats {
+            let graph_stats = graph.stats();
+            eprintln!("Graph Statistics:");
+            eprintln!("  Nodes: {}", graph_stats.node_count);
+            eprintln!("  Edges: {}", graph_stats.edge_count);
+            eprintln!(
+                "  Cycles: {}",
+                if graph_stats.has_cycles { "Yes" } else { "No" }
+            );
 
-        if graph_stats.has_cycles {
-            if let Some(cycle) = graph.detect_cycle() {
-                let cycle_str: Vec<String> = cycle
-                    .iter()
-                    .map(|p| {
-                        p.file_name()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .to_string()
-                    })
-                    .collect();
-                eprintln!("  Cycle: {}", cycle_str.join(" → "));
+            if graph_stats.has_cycles {
+                if let Some(cycle) = graph.detect_cycle() {
+                    let cycle_str: Vec<String> = cycle
+                        .iter()
+                        .map(|p| {
+                            p.file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string()
+                        })
+                        .collect();
+                    eprintln!("  Cycle: {}", cycle_str.join(" → "));
+                }
             }
+
+            let orphans = graph.orphans();
+            eprintln!("  Orphans: {} documents", orphans.len());
+            eprintln!();
         }
 
-        let orphans = graph.orphans();
-        eprintln!("  Orphans: {} documents", orphans.len());
-        eprintln!();
-    }
+        use cue_core::graph_viz::{render, GraphFormat};
 
-    // Parse format
-    let graph_format: GraphFormat = format.parse().map_err(|e: String| {
-        anyhow::anyhow!("Invalid format: {}. Use: mermaid, dot, ascii, json", e)
-    })?;
+        // Parse format
+        let graph_format: GraphFormat = format.parse().map_err(|e: String| {
+            anyhow::anyhow!("Invalid format: {}. Use: mermaid, dot, ascii, json", e)
+        })?;
 
-    // Render graph
-    let rendered = render(&graph, graph_format);
+        // Render graph
+        let rendered = render(&graph, graph_format);
 
-    // Output to file or stdout
-    if let Some(output_path) = output {
-        fs::write(&output_path, &rendered)?;
-        eprintln!("✓ Graph written to {}", output_path);
-    } else {
-        println!("{}", rendered);
+        // Output to file or stdout
+        if let Some(output_path) = output {
+            fs::write(&output_path, &rendered)?;
+            eprintln!("✓ Graph written to {}", output_path);
+        } else {
+            println!("{}", rendered);
+        }
     }
 
     Ok(())

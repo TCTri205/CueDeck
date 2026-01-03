@@ -4,18 +4,19 @@ use std::path::PathBuf;
 use std::fs;
 
 // Generate test data if needed
-fn setup_test_workspace() -> PathBuf {
+fn setup_test_workspace(file_count: usize) -> PathBuf {
     let test_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("benches")
-        .join("test_data");
+        .join("test_data")
+        .join(format!("workspace_{}", file_count));
     
     if !test_dir.exists() {
         fs::create_dir_all(&test_dir).unwrap();
         fs::create_dir_all(test_dir.join(".cuedeck")).unwrap();
         fs::create_dir_all(test_dir.join(".cuedeck/docs")).unwrap();
         
-        // Generate 100 sample markdown files
-        for i in 0..100 {
+        // Generate markdown files
+        for i in 0..file_count {
             let content = format!(
                 "---\ntags: [test, sample{}]\npriority: {}\n---\n\n# Document {}\n\nThis is sample document number {}.\n\n## Section 1\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit.\n\n## Section 2\n\nSed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n\n## Keywords\n\nauthentication authorization database api testing concurrent programming\n",
                 i % 10,
@@ -35,7 +36,7 @@ fn setup_test_workspace() -> PathBuf {
 }
 
 fn bench_parse_files(c: &mut Criterion) {
-    let test_dir = setup_test_workspace();
+    let test_dir = setup_test_workspace(100);
     let docs_dir = test_dir.join(".cuedeck/docs");
     
     let mut group = c.benchmark_group("parsing");
@@ -64,7 +65,7 @@ fn bench_parse_files(c: &mut Criterion) {
 }
 
 fn bench_search(c: &mut Criterion) {
-    let test_dir = setup_test_workspace();
+    let test_dir = setup_test_workspace(100);
     
     let mut group = c.benchmark_group("search");
     
@@ -117,5 +118,66 @@ fn bench_search(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_parse_files, bench_search);
+// Phase 7.4: Large workspace search benchmarks (1000 files)
+fn bench_search_large(c: &mut Criterion) {
+    let test_dir = setup_test_workspace(1000);
+    
+    let mut group = c.benchmark_group("search_large");
+    group.sample_size(10); // Fewer samples for large benchmarks
+    
+    // Keyword search on 1000 files
+    group.bench_function("keyword_search_1000", |b| {
+        b.iter(|| {
+            let _ = search_workspace_with_mode(
+                black_box(&test_dir),
+                black_box("authentication"),
+                black_box(SearchMode::Keyword),
+                black_box(None),
+            );
+        });
+    });
+    
+    // Hybrid search on 1000 files (Phase 7 Exit Criteria: < 200ms)
+    #[cfg(feature = "embeddings")]
+    group.bench_function("hybrid_search_1000", |b| {
+        // Pre-warm the cache
+        let _ = search_workspace_with_mode(&test_dir, "test", SearchMode::Hybrid, None);
+        
+        b.iter(|| {
+            let start = std::time::Instant::now();
+            let _ = search_workspace_with_mode(
+                black_box(&test_dir),
+                black_box("authentication"),
+                black_box(SearchMode::Hybrid),
+                black_box(None),
+            );
+            let elapsed = start.elapsed();
+            
+            // Log if exceeds 200ms target
+            if elapsed.as_millis() > 200 {
+                eprintln!("⚠️  Search took {}ms (target: <200ms)", elapsed.as_millis());
+            }
+        });
+    });
+    
+    // Semantic search on 1000 files
+    #[cfg(feature = "embeddings")]
+    group.bench_function("semantic_search_1000", |b| {
+        // Pre-warm the cache
+        let _ = search_workspace_with_mode(&test_dir, "test", SearchMode::Semantic, None);
+        
+        b.iter(|| {
+            let _ = search_workspace_with_mode(
+                black_box(&test_dir),
+                black_box("authentication"),
+                black_box(SearchMode::Semantic),
+                black_box(None),
+            );
+        });
+    });
+    
+    group.finish();
+}
+
+criterion_group!(benches, bench_parse_files, bench_search, bench_search_large);
 criterion_main!(benches);

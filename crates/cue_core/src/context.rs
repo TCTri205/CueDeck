@@ -89,6 +89,14 @@ pub struct SearchResult {
     pub next_cursor: Option<String>,
 }
 
+/// Document paired with its search relevance score
+#[derive(Debug, Clone)]
+pub struct DocumentWithScore {
+    pub document: Document,
+    /// Relevance score normalized to [0.0, 1.0] range
+    pub score: f64,
+}
+
 impl SearchFilters {
     pub fn matches(&self, doc: &Document) -> bool {
         let meta = match &doc.frontmatter {
@@ -151,7 +159,7 @@ pub fn search_workspace_with_mode(
     query: &str,
     mode: SearchMode,
     _filters: Option<SearchFilters>,
-) -> Result<Vec<Document>> {
+) -> Result<Vec<DocumentWithScore>> {
     tracing::info!(
         "Searching workspace: {:?} for '{}' (mode: {:?})",
         root,
@@ -185,14 +193,14 @@ pub fn search_workspace_paginated(
         cursor
     );
 
-    // Get ALL matching documents first (unpaginated)
-    let all_docs = match mode {
+    // Get ALL matching documents first (unpaginated) - returns DocumentWithScore
+    let all_scored = match mode {
         SearchMode::Keyword => search_workspace_keyword_all(root, query, filters.as_ref()),
         SearchMode::Semantic => search_workspace_semantic_all(root, query, filters.as_ref()),
         SearchMode::Hybrid => search_workspace_hybrid_all(root, query, filters.as_ref()),
     }?;
 
-    let total_count = all_docs.len();
+    let total_count = all_scored.len();
     
     // Decode cursor to get offset
     let offset = match cursor {
@@ -200,12 +208,13 @@ pub fn search_workspace_paginated(
         None => 0,
     };
 
-    // Apply pagination
+    // Apply pagination - extract documents from DocumentWithScore
     let end = (offset + limit).min(total_count);
-    let docs: Vec<Document> = all_docs
+    let docs: Vec<Document> = all_scored
         .into_iter()
         .skip(offset)
         .take(limit)
+        .map(|scored| scored.document) // Extract document from DocumentWithScore
         .collect();
 
     // Generate next cursor if more results exist
@@ -230,21 +239,24 @@ pub fn search_workspace(root: &Path, query: &str, semantic: bool) -> Result<Vec<
     } else {
         SearchMode::Keyword
     };
-    search_workspace_with_mode(root, query, mode, None)
+    let results = search_workspace_with_mode(root, query, mode, None)?;
+    // Extract documents from scored results for backward compatibility
+    Ok(results.into_iter().map(|r| r.document).collect())
 }
 
 /// Keyword-based search (original implementation) - returns top 10
-fn search_workspace_keyword(root: &Path, query: &str, filters: Option<&SearchFilters>) -> Result<Vec<Document>> {
+fn search_workspace_keyword(root: &Path, query: &str, filters: Option<&SearchFilters>) -> Result<Vec<DocumentWithScore>> {
     let all_results = search_workspace_keyword_all(root, query, filters)?;
     Ok(all_results.into_iter().take(10).collect())
 }
 
 /// Keyword-based search - returns ALL results (for pagination)
-fn search_workspace_keyword_all(root: &Path, query: &str, filters: Option<&SearchFilters>) -> Result<Vec<Document>> {
+fn search_workspace_keyword_all(root: &Path, query: &str, filters: Option<&SearchFilters>) -> Result<Vec<DocumentWithScore>> {
     let query_lower = query.to_lowercase();
     let query_tokens: Vec<&str> = query_lower.split_whitespace().collect();
 
     let mut results: Vec<(Document, i32)> = Vec::new();
+    let mut max_score = 0i32;
 
     // Use walkdir to traverse
     // Filter ignored directories/files
@@ -262,6 +274,7 @@ fn search_workspace_keyword_all(root: &Path, query: &str, filters: Option<&Searc
                     let score = score_file(path, &query_lower, &query_tokens);
 
                     if score > 0 {
+                        max_score = max_score.max(score);
                         match parse_file(path) {
                             Ok(doc) => results.push((doc, score)),
                             Err(e) => tracing::warn!("Failed to parse {:?}: {}", path, e),
@@ -275,26 +288,36 @@ fn search_workspace_keyword_all(root: &Path, query: &str, filters: Option<&Searc
     // Sort by score descending
     results.sort_by(|a, b| b.1.cmp(&a.1));
 
-    // Filter and return ALL results
+    // Normalize scores to [0.0, 1.0] and filter
     let all_docs = results
         .into_iter()
         .filter(|(doc, _)| {
             filters.is_none_or(|f| f.matches(doc))
         })
-        .map(|(doc, _)| doc)
+        .map(|(doc, raw_score)| {
+            let normalized_score = if max_score > 0 {
+                (raw_score as f64) / (max_score as f64)
+            } else {
+                0.0
+            };
+            DocumentWithScore {
+                document: doc,
+                score: normalized_score,
+            }
+        })
         .collect();
 
     Ok(all_docs)
 }
 
 /// Semantic search using vector embeddings - returns top N
-fn search_workspace_semantic(root: &Path, query: &str, limit: usize, filters: Option<&SearchFilters>) -> Result<Vec<Document>> {
+fn search_workspace_semantic(root: &Path, query: &str, limit: usize, filters: Option<&SearchFilters>) -> Result<Vec<DocumentWithScore>> {
     let all_results = search_workspace_semantic_all(root, query, filters)?;
     Ok(all_results.into_iter().take(limit).collect())
 }
 
 /// Semantic search using vector embeddings - returns ALL results (for pagination)
-fn search_workspace_semantic_all(root: &Path, query: &str, filters: Option<&SearchFilters>) -> Result<Vec<Document>> {
+fn search_workspace_semantic_all(root: &Path, query: &str, filters: Option<&SearchFilters>) -> Result<Vec<DocumentWithScore>> {
     use rayon::prelude::*;
 
     tracing::info!("Performing semantic search for: '{}'", query);
@@ -363,13 +386,16 @@ fn search_workspace_semantic_all(root: &Path, query: &str, filters: Option<&Sear
     let mut sorted_candidates = candidates;
     sorted_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-    // Filter and return ALL results
+    // Filter and return ALL results with scores
     Ok(sorted_candidates
         .into_iter()
         .filter(|(doc, _)| {
             filters.is_none_or(|f| f.matches(doc))
         })
-        .map(|(doc, _)| doc)
+        .map(|(doc, similarity)| DocumentWithScore {
+            document: doc,
+            score: similarity as f64, // Convert f32 to f64
+        })
         .collect())
 }
 
@@ -382,13 +408,13 @@ fn normalize_keyword_score(raw_score: i32, max_score: i32) -> f32 {
 }
 
 /// Hybrid search: combines keyword and semantic search with weighted scoring - returns top 10
-fn search_workspace_hybrid(root: &Path, query: &str, filters: Option<&SearchFilters>) -> Result<Vec<Document>> {
+fn search_workspace_hybrid(root: &Path, query: &str, filters: Option<&SearchFilters>) -> Result<Vec<DocumentWithScore>> {
     let all_results = search_workspace_hybrid_all(root, query, filters)?;
     Ok(all_results.into_iter().take(10).collect())
 }
 
 /// Hybrid search: combines keyword and semantic search - returns ALL results (for pagination)
-fn search_workspace_hybrid_all(root: &Path, query: &str, filters: Option<&SearchFilters>) -> Result<Vec<Document>> {
+fn search_workspace_hybrid_all(root: &Path, query: &str, filters: Option<&SearchFilters>) -> Result<Vec<DocumentWithScore>> {
     use rayon::prelude::*;
 
     tracing::info!("Performing hybrid search for: '{}'", query);
@@ -473,13 +499,16 @@ fn search_workspace_hybrid_all(root: &Path, query: &str, filters: Option<&Search
         scored.len()
     );
 
-    // Filter and return ALL results
+    // Filter and return ALL results with scores
     Ok(scored
         .into_iter()
         .filter(|(doc, _)| {
             filters.is_none_or(|f| f.matches(doc))
         })
-        .map(|(doc, _)| doc)
+        .map(|(doc, hybrid_score)| DocumentWithScore {
+            document: doc,
+            score: hybrid_score as f64, // Convert f32 to f64
+        })
         .collect())
 }
 

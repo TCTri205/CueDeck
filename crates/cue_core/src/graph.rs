@@ -9,6 +9,8 @@ use cue_common::{CueError, Document, Result};
 use petgraph::algo::{is_cyclic_directed, toposort};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
+use rayon::prelude::*;
+use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -61,40 +63,80 @@ impl DependencyGraph {
             }
         }
 
-        // Step 3: Add edges based on document links
-        for doc in docs {
-            let from_node = path_to_node[&doc.path];
-
-            for link in &doc.links {
-                // Try to resolve link target
-                let target_path = if link.starts_with("./") || link.starts_with("../") {
-                    // Relative path
-                    doc.path
-                        .parent()
-                        .and_then(|parent| parent.join(link).canonicalize().ok())
-                } else if link.contains('/') {
-                    // Absolute or rooted path
-                    Some(PathBuf::from(link))
-                } else {
-                    // Try filename or slug resolution
-                    file_map
-                        .get(&link.to_lowercase())
-                        .cloned()
-                        .or_else(|| slug_map.get(&link.to_lowercase()).cloned())
-                };
-
-                // Add edge if target exists in graph
-                if let Some(target) = target_path {
-                    if let Some(&to_node) = path_to_node.get(&target) {
-                        graph.add_edge(from_node, to_node, ());
-                        tracing::debug!(
-                            "Added edge: {:?} -> {:?}",
-                            doc.path.file_name().unwrap_or_default(),
-                            target.file_name().unwrap_or_default()
-                        );
-                    }
-                }
-            }
+        // Step 3: Compute edges (parallelized for large graphs)
+        // Phase 7.5: Use parallel edge computation for graphs with > 100 documents
+        const PARALLEL_THRESHOLD: usize = 100;
+        
+        let edges: Vec<(NodeIndex, NodeIndex)> = if docs.len() > PARALLEL_THRESHOLD {
+            tracing::debug!("Using parallel edge computation for {} documents", docs.len());
+            
+            // Parallel computation of edges
+            docs.par_iter()
+                .flat_map(|doc| {
+                    let from_node = path_to_node[&doc.path];
+                    
+                    doc.links
+                        .iter()
+                        .filter_map(|link| {
+                            // Resolve link target (read-only operations)
+                            let target_path = if link.starts_with("./") || link.starts_with("../") {
+                                // Relative path
+                                doc.path
+                                    .parent()
+                                    .and_then(|parent| parent.join(link).canonicalize().ok())
+                            } else if link.contains('/') {
+                                // Absolute or rooted path
+                                Some(PathBuf::from(link))
+                            } else {
+                                // Try filename or slug resolution
+                                file_map
+                                    .get(&link.to_lowercase())
+                                    .cloned()
+                                    .or_else(|| slug_map.get(&link.to_lowercase()).cloned())
+                            };
+                            
+                            // Return edge if target exists
+                            target_path.and_then(|target| {
+                                path_to_node.get(&target).map(|&to_node| (from_node, to_node))
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        } else {
+            // Serial computation for small graphs (avoid parallelization overhead)
+            docs.iter()
+                .flat_map(|doc| {
+                    let from_node = path_to_node[&doc.path];
+                    
+                    doc.links
+                        .iter()
+                        .filter_map(|link| {
+                            let target_path = if link.starts_with("./") || link.starts_with("../") {
+                                doc.path
+                                    .parent()
+                                    .and_then(|parent| parent.join(link).canonicalize().ok())
+                            } else if link.contains('/') {
+                                Some(PathBuf::from(link))
+                            } else {
+                                file_map
+                                    .get(&link.to_lowercase())
+                                    .cloned()
+                                    .or_else(|| slug_map.get(&link.to_lowercase()).cloned())
+                            };
+                            
+                            target_path.and_then(|target| {
+                                path_to_node.get(&target).map(|&to_node| (from_node, to_node))
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        };
+        
+        // Add edges to graph (must be done serially as petgraph is not thread-safe)
+        for (from_node, to_node) in edges {
+            graph.add_edge(from_node, to_node, ());
         }
 
         Ok(DependencyGraph {
@@ -294,6 +336,76 @@ impl DependencyGraph {
             has_cycles: is_cyclic_directed(&self.graph),
         }
     }
+
+    /// Export graph as JSON for visualization
+    pub fn to_json_export(&self) -> GraphExport {
+        use crate::parse_file;
+
+        let nodes: Vec<GraphNode> = self.graph.node_indices()
+            .map(|idx| {
+                let doc_path = &self.graph[idx];
+                
+                // Try to load document to get metadata
+                let doc = parse_file(doc_path).ok();
+                
+                let id = doc_path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                
+                let (node_type, title, metadata) = if let Some(ref d) = doc {
+                    let has_fm = d.frontmatter.is_some();
+                    let title = d.frontmatter.as_ref().map(|m| m.title.clone());
+                    let metadata = d.frontmatter.as_ref()
+                        .and_then(|m| serde_json::to_value(m).ok());
+                    
+                    let node_type = if has_fm {
+                        "task".to_string()
+                    } else {
+                        "document".to_string()
+                    };
+                    
+                    (node_type, title, metadata)
+                } else {
+                    ("document".to_string(), None, None)
+                };
+
+                GraphNode {
+                    id,
+                    path: doc_path.display().to_string(),
+                    node_type,
+                    title,
+                    metadata,
+                }
+            })
+            .collect();
+
+        let edges: Vec<GraphEdge> = self.graph.edge_indices()
+            .filter_map(|idx| {
+                let (from_idx, to_idx) = self.graph.edge_endpoints(idx)?;
+                let from_path = &self.graph[from_idx];
+                let to_path = &self.graph[to_idx];
+                
+                Some(GraphEdge {
+                    from: from_path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown")
+                        .to_string(),
+                    to: to_path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown")
+                        .to_string(),
+                    edge_type: "dependency".to_string(),
+                })
+            })
+            .collect();
+
+        GraphExport {
+            nodes,
+            edges,
+            stats: self.stats(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -302,11 +414,41 @@ enum VisitState {
     Done,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphStats {
     pub node_count: usize,
     pub edge_count: usize,
     pub has_cycles: bool,
+}
+
+/// Node in the exported graph
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GraphNode {
+    pub id: String,
+    pub path: String,
+    #[serde(rename = "type")]
+    pub node_type: String,  // "document", "task"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// Edge in the exported graph
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GraphEdge {
+    pub from: String,
+    pub to: String,
+    #[serde(rename = "type")]
+    pub edge_type: String,  // "dependency", "link"
+}
+
+/// Complete graph export for JSON serialization
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GraphExport {
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<GraphEdge>,
+    pub stats: GraphStats,
 }
 
 #[cfg(test)]

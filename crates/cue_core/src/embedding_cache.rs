@@ -143,8 +143,16 @@ impl EmbeddingCache {
         self.misses += 1;
 
         // Truncate very long content to avoid embedding overhead
+        // Use char_indices to ensure we don't split in the middle of a UTF-8 character
         let content_sample = if content.len() > 5000 {
-            &content[..5000]
+            // Find the last safe char boundary before 5000 bytes
+            let safe_end = content
+                .char_indices()
+                .take_while(|(idx, _)| *idx < 5000)
+                .last()
+                .map(|(idx, ch)| idx + ch.len_utf8())
+                .unwrap_or(0);
+            &content[..safe_end]
         } else {
             content
         };

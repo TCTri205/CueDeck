@@ -6,6 +6,7 @@ members = [
     "crates/cue_mcp",
     "crates/cue_cli",
     "crates/cue_test_helpers",
+    "crates/cue_sync",
 ]
 resolver = "2"
 

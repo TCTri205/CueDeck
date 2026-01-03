@@ -1,0 +1,53 @@
+// Temporary cmd_search stub - implements after cmd_open
+async fn cmd_search(
+    query: String,
+    mode: String,
+    tags: Option<Vec<String>>,
+    priority: Option<String>,
+    assignee: Option<String>,
+    json: bool,
+    limit: usize,
+) -> anyhow::Result<()> {
+    use cue_core::context::{search_workspace_with_mode, SearchFilters, SearchMode};
+    use serde_json::json;
+
+    let cwd = std::env::current_dir()?;
+    let search_mode = SearchMode::parse(&mode);
+
+    let filters = if tags.is_some() || priority.is_some() || assignee.is_some() {
+        Some(SearchFilters {
+            tags,
+            priority,
+            assignee,
+        })
+    } else {
+        None
+    };
+
+    let docs = search_workspace_with_mode(&cwd, &query, search_mode, filters)?;
+    let results: Vec<_> = docs.into_iter().take(limit).collect();
+
+    if json {
+        // JSON output for VSCode extension
+        let json_results: Vec<_> = results
+            .iter()
+            .map(|doc| {
+                json!({
+                    "path": doc.path.display().to_string(),
+                    "score": 1.0, // TODO: Add real scoring
+                    "preview": doc.content.chars().take(200).collect::<String>(),
+                })
+            })
+            .collect();
+        
+        println!("{}", serde_json::to_string_pretty(&json_results)?);
+    } else {
+        // Human-readable output
+        eprintln!("Found {} results:", results.len());
+        for (i, doc) in results.iter().enumerate() {
+            eprintln!("{}. {}", i + 1, doc.path.display());
+        }
+    }
+
+    Ok(())
+}
