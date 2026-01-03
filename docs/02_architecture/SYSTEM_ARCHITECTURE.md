@@ -41,7 +41,7 @@ graph TB
     
     Core --> Config
     Core --> Common
-    Core <-->|cache metadata| FS
+    Core <-->|cache/db| FS
     
     CLI -->|fuzzy search| User
     MCP -->|SCENE.md| AIAgent
@@ -68,7 +68,8 @@ graph TB
 ### Storage
 
 - **Source of Truth**: Markdown files in `.cuedeck/cards/` and `.cuedeck/docs/`.
-- **Cache**: JSON metadata in `.cuedeck/.cache/metadata.json`.
+- **Cache**: JSON metadata in `.cuedeck/documents.bin` (Full content).
+- **Index**: SQLite database in `.cuedeck/metadata.db` (Fast metadata & tokens).
 
 ### Outputs
 
@@ -88,8 +89,8 @@ flowchart LR
     D --> G[File Index]
     F --> G
     
-    G -->|list files| H[Cache Manager]
-    H -->|check SHA| I{Changed?}
+    G -->|list files| H[DbManager]
+    H -->|query DB| I{Changed?}
     I -->|Yes| J[Re-parse MD]
     I -->|No| K[Use Cached]
     

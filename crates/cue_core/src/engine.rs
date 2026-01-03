@@ -1,4 +1,5 @@
 use crate::cache::DocumentCache;
+use crate::db::{DbManager, migration};
 use crate::graph::DependencyGraph;
 use cue_common::Result;
 use std::collections::HashSet;
@@ -16,6 +17,7 @@ pub struct CueEngine {
     // Keep track of active keys to handle deletions effectively during full scan
     known_files: HashSet<PathBuf>,
     config: Config,
+    db: Option<DbManager>,  // Optional SQLite backend (hybrid architecture)
 }
 
 impl CueEngine {
@@ -26,6 +28,56 @@ impl CueEngine {
         cache
             .load()
             .map_err(|e| std::io::Error::other(e.to_string()))?;
+
+        // Phase 7.3: Check and perform migration if needed
+        let db = if let Ok(true) = migration::needs_migration(workspace_root) {
+            tracing::info!("Migration needed. Starting migration from JSON to SQLite...");
+            match migration::migrate_json_to_sqlite(workspace_root, &cache) {
+                Ok(count) => {
+                    tracing::info!("Migration completed successfully ({} files).", count);
+                    // Open DB after successful migration
+                    let db_path = workspace_root.join(".cue/metadata.db");
+                    match DbManager::open(&db_path) {
+                        Ok(db) => Some(db),
+                        Err(e) => {
+                            tracing::error!("Failed to open database after migration: {}", e);
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Migration failed: {}. Falling back to JSON-only mode.", e);
+                    None
+                }
+            }
+        } else {
+            // Try to open existing DB if available
+            let db_path = workspace_root.join(".cue/metadata.db");
+            if db_path.exists() {
+                 match DbManager::open(&db_path) {
+                    Ok(db) => Some(db),
+                    Err(e) => {
+                        tracing::error!("Failed to open existing database: {}. Falling back to JSON-only.", e);
+                        None
+                    }
+                }
+            } else {
+                // First run or JSON-only mode
+                // If we want to start using DB from scratch for new projects, we can init it here.
+                // For Phase 7.3, we enable it by default for everyone.
+                let dot_cue = workspace_root.join(".cue");
+                if !dot_cue.exists() {
+                    std::fs::create_dir_all(&dot_cue)?;
+                }
+                match DbManager::open(&db_path) {
+                    Ok(db) => Some(db),
+                    Err(e) => {
+                         tracing::warn!("Failed to initialize new database: {}", e);
+                         None
+                    }
+                }
+            }
+        };
 
         // Load config
         let config = Config::load(workspace_root)?;
@@ -39,6 +91,7 @@ impl CueEngine {
             graph,
             known_files: HashSet::new(),
             config,
+            db,
         };
 
         // Initial full scan
@@ -117,6 +170,17 @@ impl CueEngine {
     pub fn update_file(&mut self, path: &Path) -> Result<()> {
         match self.cache.get_or_parse(path) {
             Ok(doc) => {
+                // Phase 7.3: Sync to SQLite if available
+                if let Some(db) = &self.db {
+                    let size_bytes = std::fs::metadata(path)
+                        .map(|m| m.len())
+                        .unwrap_or(0);
+                    
+                    if let Err(e) = db.upsert_file(path, &doc.hash, size_bytes, doc.tokens) {
+                        tracing::warn!("Failed to sync file to DB {:?}: {}", path, e);
+                    }
+                }
+
                 self.graph.add_or_update_document(&doc);
                 self.known_files.insert(path.to_path_buf());
                 Ok(())
@@ -132,6 +196,13 @@ impl CueEngine {
 
     /// Handle file deletion
     pub fn remove_file(&mut self, path: &Path) {
+        // Phase 7.3: Sync deletion to SQLite if available
+        if let Some(db) = &self.db {
+            if let Err(e) = db.delete_file(path) {
+                tracing::warn!("Failed to delete file from DB {:?}: {}", path, e);
+            }
+        }
+
         self.cache.invalidate(path);
         self.graph.remove_document(&path.to_path_buf());
         self.known_files.remove(path);

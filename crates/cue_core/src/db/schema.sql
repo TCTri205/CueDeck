@@ -8,12 +8,14 @@ CREATE TABLE IF NOT EXISTS files (
     hash TEXT NOT NULL,
     modified_at INTEGER NOT NULL,  -- Unix timestamp
     size_bytes INTEGER NOT NULL,
+    tokens INTEGER NOT NULL DEFAULT 0,  -- Token count for budgeting
     created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_files_hash ON files(hash);
 CREATE INDEX IF NOT EXISTS idx_files_modified ON files(modified_at);
 CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
+CREATE INDEX IF NOT EXISTS idx_files_tokens ON files(tokens);
 
 -- Cards table for task metadata
 CREATE TABLE IF NOT EXISTS cards (

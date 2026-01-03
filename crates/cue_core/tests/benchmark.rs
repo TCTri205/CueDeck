@@ -64,3 +64,69 @@ fn benchmark_performance() {
         );
     }
 }
+
+#[test]
+#[ignore]
+fn benchmark_sqlite_batch_ops() {
+    use cue_core::db::DbManager;
+    use std::path::PathBuf;
+
+    let temp = assert_fs::TempDir::new().unwrap();
+    let db_path = temp.child("bench.db");
+    
+    // Test parameters
+    let file_count = 1000;
+    
+    // 1. Single Insert Benchmark
+    {
+        let db = DbManager::open(db_path.path()).unwrap();
+        // Clear existing
+        let _ = db_path.path().to_owned(); // Keep temp alive
+        
+        println!("\nStarting Single Insert Benchmark ({} files)...", file_count);
+        let start = Instant::now();
+        
+        for i in 0..file_count {
+            db.upsert_file(
+                &PathBuf::from(format!("file_{}.md", i)),
+                &format!("hash_{}", i),
+                1000,
+                0, // tokens (dummy)
+            ).unwrap();
+        }
+        
+        let duration = start.elapsed();
+        println!("Single Insert: {:?} ({:.2} ms/op)", 
+            duration, 
+            duration.as_secs_f64() * 1000.0 / file_count as f64
+        );
+    }
+
+    // 2. Batch Insert Benchmark
+    let temp_batch = assert_fs::TempDir::new().unwrap();
+    let db_batch_path = temp_batch.child("bench_batch.db");
+    {
+        let mut db = DbManager::open(db_batch_path.path()).unwrap();
+        
+        let files: Vec<_> = (0..file_count)
+            .map(|i| (
+                PathBuf::from(format!("file_{}.md", i)),
+                format!("hash_{}", i),
+                0, // modified_at (dummy)
+                1000u64,
+                0 // tokens (dummy)
+            ))
+            .collect();
+
+        println!("\nStarting Batch Insert Benchmark ({} files)...", file_count);
+        let start = Instant::now();
+        
+        db.upsert_files_batch(&files).unwrap();
+        
+        let duration = start.elapsed();
+        println!("Batch Insert:  {:?} ({:.4} ms/op)", 
+            duration, 
+            duration.as_secs_f64() * 1000.0 / file_count as f64
+        );
+    }
+}

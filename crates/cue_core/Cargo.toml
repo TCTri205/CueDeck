@@ -32,6 +32,7 @@ memmap2.workspace = true
 schemars = { workspace = true, features = ["preserve_order"] }
 lazy_static.workspace = true
 base64 = "0.22"
+fs2 = "0.4"  # File locking for migration
 
 [dev-dependencies]
 cue_test_helpers = { path = "../cue_test_helpers" }
@@ -40,5 +41,5 @@ predicates.workspace = true
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [[bench]]
-name = "performance"
+name = "migration_bench"
 harness = false

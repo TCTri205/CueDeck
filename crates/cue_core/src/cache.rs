@@ -29,7 +29,7 @@ pub struct DocumentCache {
     /// Cache directory path (.cuedeck/cache/)
     cache_dir: PathBuf,
     /// In-memory cache entries
-    entries: HashMap<PathBuf, CachedDocument>,
+    pub(crate) entries: HashMap<PathBuf, CachedDocument>,
     /// In-memory hash cache for fast validation (Phase 7 optimization)
     hash_cache: HashMap<PathBuf, String>,
     /// Statistics
