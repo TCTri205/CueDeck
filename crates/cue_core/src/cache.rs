@@ -73,6 +73,13 @@ impl DocumentCache {
                 match bincode::deserialize::<HashMap<PathBuf, CachedDocument>>(&data) {
                     Ok(entries) => {
                         tracing::info!("Loaded {} cached documents", entries.len());
+                        
+                        // Rebuild hash_cache from entries for fast validation (Phase 7 optimization)
+                        self.hash_cache = entries
+                            .iter()
+                            .map(|(path, cached)| (path.clone(), cached.hash.clone()))
+                            .collect();
+                        
                         self.entries = entries;
                         Ok(())
                     }
@@ -173,6 +180,7 @@ impl DocumentCache {
     /// Invalidate a specific file in the cache
     pub fn invalidate(&mut self, path: &Path) {
         if self.entries.remove(path).is_some() {
+            self.hash_cache.remove(path);  // Also remove from hash cache
             tracing::debug!("Invalidated cache for {:?}", path);
         }
     }
@@ -185,6 +193,7 @@ impl DocumentCache {
     /// Clear all cache entries
     pub fn clear(&mut self) {
         self.entries.clear();
+        self.hash_cache.clear();  // Also clear hash cache
         tracing::info!("Cache cleared");
     }
 
