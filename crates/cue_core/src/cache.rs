@@ -30,6 +30,8 @@ pub struct DocumentCache {
     cache_dir: PathBuf,
     /// In-memory cache entries
     entries: HashMap<PathBuf, CachedDocument>,
+    /// In-memory hash cache for fast validation (Phase 7 optimization)
+    hash_cache: HashMap<PathBuf, String>,
     /// Statistics
     hits: usize,
     misses: usize,
@@ -49,6 +51,7 @@ impl DocumentCache {
         Ok(Self {
             cache_dir,
             entries: HashMap::new(),
+            hash_cache: HashMap::new(),
             hits: 0,
             misses: 0,
         })
@@ -111,23 +114,38 @@ impl DocumentCache {
     /// # Returns
     /// The parsed document (from cache if valid, otherwise freshly parsed)
     pub fn get_or_parse(&mut self, path: &Path) -> Result<Document> {
-        // Compute current file hash and modified time
+        // Fast path: Check in-memory hash cache first
         let metadata = fs::metadata(path)
             .with_context(|| format!("Failed to read metadata for {:?}", path))?;
-
         let modified = metadata.modified().context("Failed to get modified time")?;
 
-        let content = fs::read(path).with_context(|| format!("Failed to read file {:?}", path))?;
+        // Check if we have a cached entry with matching modified time
+        if let Some(cached) = self.entries.get(path) {
+            if cached.modified == modified {
+                // Check in-memory hash cache to avoid re-hashing
+                if let Some(cached_hash) = self.hash_cache.get(path) {
+                    if cached_hash == &cached.hash {
+                        tracing::trace!("Cache HIT (fast path): {:?}", path);
+                        self.hits += 1;
+                        return Ok(cached.document.clone());
+                    }
+                }
+            }
+        }
 
+        // Slower path: Compute hash if modified time changed or hash not in cache
+        let content = fs::read(path).with_context(|| format!("Failed to read file {:?}", path))?;
         let mut hasher = Sha256::new();
         hasher.update(&content);
         let current_hash = format!("{:x}", hasher.finalize());
 
-        // Check cache
+        // Update in-memory hash cache
+        self.hash_cache.insert(path.to_path_buf(), current_hash.clone());
+
+        // Check if document is still cached with this hash
         if let Some(cached) = self.entries.get(path) {
-            // Quick check: modified time
-            if cached.modified == modified && cached.hash == current_hash {
-                tracing::trace!("Cache HIT: {:?}", path);
+            if cached.hash == current_hash {
+                tracing::trace!("Cache HIT (hash match): {:?}", path);
                 self.hits += 1;
                 return Ok(cached.document.clone());
             }
