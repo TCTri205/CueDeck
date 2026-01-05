@@ -33,6 +33,8 @@ schemars = { workspace = true, features = ["preserve_order"] }
 lazy_static.workspace = true
 base64 = "0.22"
 fs2 = "0.4"  # File locking for migration
+grep = "0.3"  # Code search (same engine as ripgrep)
+ignore = "0.4"  # Gitignore support for code search
 
 [dev-dependencies]
 cue_test_helpers = { path = "../cue_test_helpers" }

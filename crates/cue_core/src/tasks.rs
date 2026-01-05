@@ -93,6 +93,28 @@ pub fn create_task_with_metadata(
 ) -> Result<PathBuf> {
     use rand::Rng;
 
+    // Validate title (from DATA_SCHEMA.md: required, non-empty, max 200 chars)
+    let title = title.trim();
+    if title.is_empty() {
+        return Err(CueError::ValidationError("Task title cannot be empty".to_string()));
+    }
+    if title.len() > 200 {
+        return Err(CueError::ValidationError(format!(
+            "Task title exceeds 200 characters (got {})",
+            title.len()
+        )));
+    }
+
+    // Validate priority if provided
+    if let Some(p) = priority {
+        if !["low", "medium", "high", "critical"].contains(&p.to_lowercase().as_str()) {
+            return Err(CueError::ValidationError(format!(
+                "Invalid priority '{}'. Must be: low, medium, high, or critical",
+                p
+            )));
+        }
+    }
+
     // Validate dependencies exist before creating task
     if let Some(deps) = &depends_on {
         for dep_id in deps {

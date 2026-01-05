@@ -4,10 +4,19 @@ AI-native knowledge graph extension for CueDeck workspaces.
 
 ## Features
 
-- **Smart Search**: Search across your markdown knowledge graph with `Cmd+Shift+P` → "CueDeck: Search Documents"
+- **Smart Search**: Search across your markdown knowledge graph
 - **Task Management**: View and manage tasks from your workspace
-- **Graph Visualization**: (Coming in Phase 8.2)
-- **Real-time Sync**: (Coming in Phase 8.2)
+- **Graph Visualization**: Interactive dependency graph with Cytoscape.js
+- **Quick Actions**: Keyboard shortcuts for fast navigation
+
+## Keyboard Shortcuts
+
+| Command | Windows/Linux | macOS | Description |
+|---------|---------------|-------|-------------|
+| Create Task | `Ctrl+Shift+T` | `Cmd+Shift+T` | Create a new task |
+| Search Documents | `Ctrl+Shift+F` | `Cmd+Shift+F` | Open search panel |
+| Graph View | `Ctrl+Shift+G` | `Cmd+Shift+G` | Open graph visualization |
+| Refresh Tasks | `Ctrl+Shift+R` | `Cmd+Shift+R` | Refresh task list |
 
 ## Requirements
 
@@ -25,7 +34,7 @@ This extension contributes the following settings:
 
 1. Open a CueDeck workspace (folder containing `.cuedeck/config.toml`)
 2. The extension will activate automatically
-3. Use `Cmd/Ctrl+Shift+P` and search for "CueDeck" commands
+3. Use keyboard shortcuts or `Cmd/Ctrl+Shift+P` and search for "CueDeck" commands
 
 ## Development
 
@@ -44,6 +53,8 @@ npm run compile
 - Search panel with CLI integration
 - Task sidebar view
 - JSON output support
+- Keyboard shortcuts for quick actions
+- Graph visualization with Cytoscape.js
 
 ## License
 

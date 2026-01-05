@@ -656,6 +656,258 @@
 }
 ```
 
+### 9. `search_code` (Week 4)
+
+- **Description**: Search code using regex patterns with gitignore support
+- **Complexity**: O(n × m) where n = number of files, m = average file size
+- **Input Schema**:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "pattern": {
+      "type": "string",
+      "description": "Regex pattern (e.g., 'fn\\s+authenticate')",
+      "maxLength": 200
+    },
+    "file_glob": {
+      "type": "string",
+      "description": "Optional glob filter (e.g., '*.rs', 'src/**/*.ts')"
+    },
+    "case_sensitive": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable case-sensitive matching"
+    },
+    "max_results": {
+      "type": "integer",
+      "default": 50,
+      "minimum": 1,
+      "maximum": 100
+    }
+  },
+  "required": ["pattern"]
+}
+```
+
+- **Output Schema**:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "matches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Relative path" },
+          "line_number": { "type": "integer", "description": "1-indexed" },
+          "preview": { "type": "string", "maxLength": 100 },
+          "column": { "type": "integer" }
+        }
+      }
+    },
+    "total_count": { "type": "integer" },
+    "truncated": { "type": "boolean" }
+  }
+}
+```
+
+**Example Request**:
+
+```json
+{
+  "pattern": "fn\\s+\\w+.*username",
+  "file_glob": "*.rs",
+  "case_sensitive": false,
+  "max_results": 20
+}
+```
+
+**Example Response**:
+
+```json
+{
+  "matches": [
+    {
+      "path": "src/auth.rs",
+      "line_number": 42,
+      "preview": "pub fn authenticate(username: &str, password: &str) -> Result...",
+      "column": 8
+    }
+  ],
+  "total_count": 1,
+  "truncated": false
+}
+```
+
+**Token Efficiency**:
+
+- Per match: ~60 tokens (vs ~2000 with full content)
+- **97% token savings** vs returning file contents
+
+### 10. `read_file_lines` (Week 4)
+
+- **Description**: Read specific line range from file (token-efficient)
+- **Complexity**: O(n) where n = number of lines in range
+- **Input Schema**:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Relative path from workspace"
+    },
+    "start_line": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Starting line (1-indexed, inclusive)"
+    },
+    "end_line": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Ending line (1-indexed, inclusive)"
+    }
+  },
+  "required": ["path", "start_line", "end_line"]
+}
+```
+
+- **Output Schema**:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": { "type": "string" },
+    "start_line": { "type": "integer" },
+    "end_line": { "type": "integer" },
+    "content": { "type": "string" },
+    "line_count": { "type": "integer" }
+  }
+}
+```
+
+**Example Request**:
+
+```json
+{
+  "path": "src/main.rs",
+  "start_line": 100,
+  "end_line": 120
+}
+```
+
+**Example Response**:
+
+```json
+{
+  "path": "src/main.rs",
+  "start_line": 100,
+  "end_line": 120,
+  "content": "fn main() {\n    println!(\"Hello\");\n}\n",
+  "line_count": 21
+}
+```
+
+**Token Efficiency**:
+
+- Reading 20 lines from 5000-line file: ~300 tokens (vs ~15,000 for full file)
+- **98% token savings**
+
+**Security**: Validates workspace boundaries and blocks dangerous file types
+
+### 11. `replace_in_file` (Week 4)
+
+- **Description**: Find and replace text in file with automatic backup
+- **Complexity**: O(n) where n = file size
+- **Input Schema**:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Relative path from workspace"
+    },
+    "find": {
+      "type": "string",
+      "description": "Text or regex to find",
+      "maxLength": 500
+    },
+    "replace": {
+      "type": "string",
+      "description": "Replacement text",
+      "maxLength": 500
+    },
+    "regex": {
+      "type": "boolean",
+      "default": false,
+      "description": "Treat 'find' as regex pattern"
+    }
+  },
+  "required": ["path", "find", "replace"]
+}
+```
+
+- **Output Schema**:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": { "type": "string" },
+    "matches_found": { "type": "integer" },
+    "backup_path": { "type": "string", "nullable": true }
+  }
+}
+```
+
+**Example Request**:
+
+```json
+{
+  "path": "src/config.rs",
+  "find": "localhost:8080",
+  "replace": "0.0.0.0:3000",
+  "regex": false
+}
+```
+
+**Example Response**:
+
+```json
+{
+  "path": "src/config.rs",
+  "matches_found": 3,
+  "backup_path": ".cuedeck/backups/config.rs_20260105_001234"
+}
+```
+
+**Security Features**:
+
+- ✅ Automatic backup before modification (max 10 versions)
+- ✅ Canonical path validation (blocks path traversal)
+- ✅ File type blocklist (exe, dll, key, env, db)
+- ✅ Workspace boundary enforcement
+- ✅ File size limit (10MB max)
+
+**Token Efficiency**:
+
+- Send pattern instead of full content: ~20 tokens (vs ~3000)
+- **99% token savings**
+
+**Backup Management**:
+
+- Location: `.cuedeck/backups/`
+- Naming: `<filename>_YYYYMMDD_HHMMSS`
+- Auto-cleanup: Keeps last 10 backups per file
+
 ### 5. Error Responses
 
 All tools return standard JSON-RPC 2.0 Errors on failure.

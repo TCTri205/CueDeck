@@ -72,6 +72,32 @@ cue doctor
 
 For comprehensive command reference, see [CLI_REFERENCE.md](./docs/04_tools_and_data/CLI_REFERENCE.md).
 
+## 🎨 TUI Dashboard (NEW!)
+
+**Interactive Terminal UI** for power users who prefer keyboard-driven workflows.
+
+```bash
+# Launch TUI dashboard
+cue tui
+```
+
+**Features**:
+
+- 📊 **Dashboard Tab**: Workspace stats and recent files
+- ✅ **Tasks Tab**: Interactive task management (Kanban/List view)
+- 🔗 **Graph Tab**: Knowledge graph visualization
+
+**Quick Keybindings**:
+
+- `Tab` / `Shift+Tab`: Switch tabs
+- `j` / `k`: Navigate lists (Vim-style)
+- `q`: Quit
+- `?`: Show help
+
+For full TUI documentation and all keybindings, see [TUI User Guide](./docs/TUI_GUIDE.md) *(coming soon)*.
+
+> **Performance**: Launches in ~1s, <10MB memory usage
+
 ## 🔌 MCP Integration
 
 CueDeck integrates with AI tools through the **Model Context Protocol** (MCP). This enables AI agents to read your documentation, manage tasks, and search your workspace.
@@ -130,7 +156,7 @@ See [TOOLS_SPEC.md](./docs/04_tools_and_data/TOOLS_SPEC.md) for detailed API doc
 
 ## 📚 Project Structure
 
-```
+```plaintext
 CueDeck/
 ├── crates/
 │   ├── cue_common/   # Shared types and errors

@@ -150,6 +150,22 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
   - **Use Case**: Efficient reading of large documentation files.
   - **Benefit**: OS-managed caching, reduced memory copies.
 
+#### Terminal User Interface (Phase 8)
+
+- **`ratatui`** (v0.26): Terminal UI framework.
+  - **Why Not**: `tui-rs` (unmaintained, ratatui is the successor), `cursive` (less flexible).
+  - **Use Case**: Interactive TUI dashboard (`cue tui` command).
+  - **Features**: Immediate mode rendering, composable widgets, buffer-based rendering.
+
+- **`crossterm`** (v0.27): Cross-platform terminal control.
+  - **Why Not**: `termion` (Unix-only), `pancurses` (heavier).
+  - **Use Case**: Keyboard input handling, terminal setup/cleanup.
+  - **Platform**: Uses native APIs (Windows Console API, Unix termios).
+
+- **`tui-textarea`** (v0.4): Multi-line text input widget.
+  - **Use Case**: Optional, for search input in TUI.
+  - **Alternative**: Custom text input implementation if not needed.
+
 ## Version Pinning Strategy
 
 ```toml

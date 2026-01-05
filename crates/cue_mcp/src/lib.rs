@@ -1,14 +1,14 @@
 //! MCP (Model Context Protocol) server implementation
 //!
 //! This crate provides the JSON-RPC server for AI agent integration.
-//!
-//! CRITICAL: stdout is reserved EXCLUSIVELY for JSON-RPC responses.
-//! All logs (Info/Warn/Error) MUST go to stderr to avoid protocol corruption.
+
+mod week4_tools;
 
 use cue_common::{CueError, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::env;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -219,10 +219,15 @@ async fn handle_tools_call(params: Option<Value>) -> Result<Value> {
         "read_doc" => handle_read_doc(args).await?,
         "list_tasks" => handle_list_tasks(args).await?,
         "create_task" => handle_create_task(args).await?,
+        "create_task_from_template" => handle_create_task_from_template(args).await?,
         "get_task_dependencies" => handle_get_task_dependencies(args).await?,
         "validate_task_graph" => handle_validate_task_graph(args).await?,
         "query_graph" => handle_query_graph(args).await?,
         "update_task" => handle_update_task(args).await?,
+        "batch_query" => handle_batch_query(args).await?,
+        "search_code" => week4_tools::handle_search_code(args).await?,
+        "read_file_lines" => week4_tools::handle_read_file_lines(args).await?,
+        "replace_in_file" => week4_tools::handle_replace_in_file(args).await?,
         _ => {
             return Err(CueError::ValidationError(format!(
                 "Unknown tool: {}",
@@ -346,6 +351,25 @@ async fn handle_tools_list() -> Result<Value> {
                 }
             },
             {
+                "name": "create_task_from_template",
+                "description": "Create a structured task from a template (bug, feature, meeting)",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "template": {
+                            "type": "string",
+                            "enum": ["bug", "feature", "meeting"],
+                            "description": "Template type to use"
+                        },
+                        "title": {
+                            "type": "string",
+                            "description": "Task title"
+                        }
+                    },
+                    "required": ["template", "title"]
+                }
+            },
+            {
                 "name": "list_tasks",
                 "description": "List task cards filtered by status",
                 "inputSchema": {
@@ -444,6 +468,122 @@ async fn handle_tools_list() -> Result<Value> {
                         }
                     },
                     "required": ["id", "updates"]
+                }
+            },
+            {
+                "name": "batch_query",
+                "description": "Execute multiple queries efficiently in a single batch",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "queries": {
+                            "type": "array",
+                            "description": "Array of query objects",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "string",
+                                        "description": "Client-provided ID for response matching"
+                                    },
+                                    "query_string": {
+                                        "type": "string",
+                                        "description": "Query in unified language (e.g. 'status:active +backend')"
+                                    },
+                                    "limit": {
+                                        "type": "integer",
+                                        "description": "Optional result limit per query"
+                                    }
+                                },
+                                "required": ["id", "query_string"]
+                            }
+                        }
+                    },
+                    "required": ["queries"]
+                }
+            },
+            {
+                "name": "search_code",
+                "description": "Search code using regex patterns (respects .gitignore)",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "pattern": {
+                            "type": "string",
+                            "description": "Regex pattern to search for (e.g., 'fn\\s+authenticate')",
+                            "maxLength": 200
+                        },
+                        "file_glob": {
+                            "type": "string",
+                            "description": "Optional glob filter (e.g., '*.rs', 'src/**/*.ts')"
+                        },
+                        "case_sensitive": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Enable case-sensitive matching"
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "default": 50,
+                            "minimum": 1,
+                            "maximum": 100,
+                            "description": "Maximum number of results to return"
+                        }
+                    },
+                    "required": ["pattern"]
+                }
+            },
+            {
+                "name": "read_file_lines",
+                "description": "Read specific line range from file (token-efficient)",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Relative path from workspace root"
+                        },
+                        "start_line": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Starting line number (1-indexed, inclusive)"
+                        },
+                        "end_line": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Ending line number (1-indexed, inclusive)"
+                        }
+                    },
+                    "required": ["path", "start_line", "end_line"]
+                }
+            },
+            {
+                "name": "replace_in_file",
+                "description": "Find and replace text in file (auto-backup enabled)",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Relative path from workspace root"
+                        },
+                        "find": {
+                            "type": "string",
+                            "description": "Text or regex pattern to find",
+                            "maxLength": 500
+                        },
+                        "replace": {
+                            "type": "string",
+                            "description": "Replacement text",
+                            "maxLength": 500
+                        },
+                        "regex": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Treat 'find' as regex pattern"
+                        }
+                    },
+                    "required": ["path", "find", "replace"]
                 }
             }
         ]
@@ -680,6 +820,65 @@ async fn handle_create_task(params: Option<Value>) -> Result<Value> {
     serde_json::to_value(doc).map_err(CueError::JsonError)
 }
 
+/// Create task from template handler
+async fn handle_create_task_from_template(params: Option<Value>) -> Result<Value> {
+    #[derive(Deserialize)]
+    struct CreateTaskFromTemplateParams {
+        template: String,
+        title: String,
+    }
+
+    let params: CreateTaskFromTemplateParams = serde_json::from_value(params.unwrap_or_default())?;
+
+    let workspace = std::env::var("CUE_WORKSPACE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+    // Validate template exists
+    let template_path = workspace.join(".cuedeck/templates").join(format!("{}.md", params.template));
+    if !template_path.exists() {
+        return Err(CueError::ValidationError(format!(
+            "Template '{}' not found in .cuedeck/templates/",
+            params.template
+        )));
+    }
+
+    // Read template content
+    let mut content = std::fs::read_to_string(&template_path)
+        .map_err(|e| CueError::ValidationError(format!("Failed to read template: {}", e)))?;
+
+    // Variable substitution
+    let now = chrono::Local::now();
+    let date_str = now.format("%Y-%m-%d").to_string();
+
+    let user = std::env::var("USERNAME")
+        .or_else(|_| std::env::var("USER"))
+        .unwrap_or_else(|_| "user".to_string());
+
+    // Generate 6-character random ID
+    let id: String = rand::random::<u32>()
+        .to_string()
+        .chars()
+        .take(6)
+        .collect();
+
+    content = content.replace("{{date}}", &date_str);
+    content = content.replace("{{user}}", &user);
+    content = content.replace("{{title}}", &params.title);
+    content = content.replace("{{id}}", &id);
+
+    // Create task using existing API
+    let task_path = cue_core::tasks::create_task(&workspace, &params.title)?;
+
+    // Write template content (overwrites the basic task created above)
+    std::fs::write(&task_path, content)
+        .map_err(|e| CueError::ValidationError(format!("Failed to write template content: {}", e)))?;
+
+    // Return the created task doc
+    let doc = cue_core::parse_file(&task_path)?;
+    serde_json::to_value(doc).map_err(CueError::JsonError)
+}
+
 /// Get task dependencies handler
 async fn handle_get_task_dependencies(params: Option<Value>) -> Result<Value> {
     #[derive(Deserialize)]
@@ -847,6 +1046,26 @@ async fn handle_update_task(params: Option<Value>) -> Result<Value> {
     let doc = cue_core::tasks::update_task(&workspace, &params.id, params.updates)?;
 
     serde_json::to_value(doc).map_err(CueError::JsonError)
+}
+
+/// Batch query handler - execute multiple queries efficiently
+async fn handle_batch_query(params: Option<Value>) -> Result<Value> {
+    let batch: cue_core::BatchQuery = params
+        .ok_or_else(|| CueError::ValidationError("Missing params".to_string()))
+        .and_then(|v| {
+            serde_json::from_value(v)
+                .map_err(|e| CueError::ValidationError(format!("Invalid params: {}", e)))
+        })?;
+
+    let workspace = std::env::var("CUE_WORKSPACE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+    // Execute batch query
+    let response = cue_core::batch_query(&workspace, &batch)?;
+
+    // Return response with metrics
+    serde_json::to_value(response).map_err(CueError::JsonError)
 }
 
 #[cfg(test)]

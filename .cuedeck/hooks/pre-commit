@@ -1,0 +1,40 @@
+#!/bin/sh
+# CueDeck Pre-commit Hook
+# 
+# This hook runs `cue doctor --strict` before each commit to ensure
+# workspace integrity for AI agent consumption.
+#
+# Installation:
+#   cp .cuedeck/hooks/pre-commit .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# Or run: cue init --install-hooks
+#
+# Escape hatch: git commit --no-verify
+
+set -e
+
+echo "🔍 CueDeck: Running pre-commit validation..."
+
+# Check if cue is available
+if ! command -v cue &> /dev/null; then
+    echo "⚠️  Warning: 'cue' command not found. Skipping validation."
+    echo "   Install CueDeck or run: cargo install --path crates/cue_cli"
+    exit 0
+fi
+
+# Run strict validation
+if cue doctor --strict; then
+    echo "✅ CueDeck: All checks passed!"
+    exit 0
+else
+    echo ""
+    echo "❌ CueDeck: Validation failed. Commit blocked."
+    echo ""
+    echo "💡 Options:"
+    echo "   1. Fix the issues and try again"
+    echo "   2. Run 'cue doctor --repair' to auto-fix fixable issues"
+    echo "   3. Use 'git commit --no-verify' to bypass (not recommended)"
+    echo ""
+    exit 1
+fi

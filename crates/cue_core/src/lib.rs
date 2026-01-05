@@ -9,7 +9,10 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub mod agent_fs;
+pub mod batch;
 pub mod cache;
+pub mod code_search;
 pub mod consistency;
 pub mod context;
 pub mod db;
@@ -19,6 +22,7 @@ pub mod embeddings;
 pub mod engine;
 pub mod graph;
 pub mod graph_viz;
+pub mod query_lang;
 pub mod task_filters;
 pub mod task_graph;
 pub mod tasks;
@@ -27,6 +31,8 @@ pub mod tasks;
 pub use context::search_workspace;
 pub use graph::DependencyGraph;
 pub use task_filters::{TaskFilters, DateFilter, DateOperator, DateValue};
+pub use query_lang::{ParsedQuery, QueryParser, FilterValue};
+pub use batch::{BatchQuery, Query, BatchResponse, QueryResult, batch_query};
 
 // Re-export commonly used functions
 pub use context::save_embedding_cache;

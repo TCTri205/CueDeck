@@ -1,0 +1,11 @@
+# Clippy Configuration for CueDeck
+# Enforces code complexity metrics to maintain code quality
+
+# Maximum cognitive complexity (unified metric replacing both cyclomatic and cognitive)
+# Measures how hard code is to understand
+# Default: 25, we use 25 to make it explicit
+cognitive-complexity-threshold = 25
+
+# Maximum lines per function
+# Default: 100, we make it explicit
+too-many-lines-threshold = 100

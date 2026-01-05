@@ -8,34 +8,91 @@ static EMBEDDING_MODEL: OnceLock<TextEmbedding> = OnceLock::new();
 pub struct EmbeddingModel;
 
 impl EmbeddingModel {
+    /// Pre-initialize the model (call during app startup to reduce first-search latency)
+    pub fn init() -> Result<()> {
+        let start = std::time::Instant::now();
+        let _ = Self::get_model(); // Force initialization
+        tracing::info!(
+            "Embedding model pre-warmed in {}ms",
+            start.elapsed().as_millis()
+        );
+        Ok(())
+    }
+
     /// Get or initialize the global embedding model (lazy + cached)
     fn get_model() -> &'static TextEmbedding {
         EMBEDDING_MODEL.get_or_init(|| {
             tracing::info!("Initializing embedding model (all-MiniLM-L6-v2)...");
+            let start = std::time::Instant::now();
+
+            // Use explicit cache directory for better control
+            let cache_dir = std::env::current_dir()
+                .ok()
+                .map(|p| p.join(".fastembed_cache"))
+                .unwrap_or_else(|| std::path::PathBuf::from(".fastembed_cache"));
 
             let model = TextEmbedding::try_new(
-                InitOptions::new(FastEmbedModel::AllMiniLML6V2).with_show_download_progress(false),
+                InitOptions::new(FastEmbedModel::AllMiniLML6V2)
+                    .with_show_download_progress(false)
+                    .with_cache_dir(cache_dir),
             )
-            .expect("Failed to initialize embedding model"); // Handle error internally
+            .expect("Failed to initialize embedding model");
 
-            tracing::info!("Embedding model initialized successfully");
+            tracing::info!(
+                "Embedding model initialized in {}ms",
+                start.elapsed().as_millis()
+            );
             model
         })
     }
 
     /// Generate embeddings for a text string
     pub fn embed(text: &str) -> Result<Vec<f32>> {
-        let model = Self::get_model(); // No longer returns Result
+        let start = std::time::Instant::now();
+        let model = Self::get_model();
+        let model_time = start.elapsed();
 
+        let start = std::time::Instant::now();
         let embeddings = model
             .embed(vec![text], None)
             .context("Failed to generate embeddings")?;
+        let embed_time = start.elapsed();
+
+        tracing::debug!(
+            "Embedding timing: model_get={}ms, embed_gen={}ms, total={}ms",
+            model_time.as_millis(),
+            embed_time.as_millis(),
+            (model_time + embed_time).as_millis()
+        );
 
         // Extract first (and only) embedding
         embeddings
             .into_iter()
             .next()
             .ok_or_else(|| anyhow::anyhow!("No embeddings generated"))
+    }
+
+    /// Batch embed multiple texts (more efficient than calling embed() repeatedly)
+    pub fn embed_batch(texts: Vec<&str>) -> Result<Vec<Vec<f32>>> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let start = std::time::Instant::now();
+        let model = Self::get_model();
+
+        let embeddings = model
+            .embed(texts.clone(), None)
+            .context("Failed to generate batch embeddings")?;
+
+        tracing::debug!(
+            "Batch embedding: {} texts in {}ms ({}ms/text avg)",
+            texts.len(),
+            start.elapsed().as_millis(),
+            start.elapsed().as_millis() / texts.len() as u128
+        );
+
+        Ok(embeddings)
     }
 
     /// Calculate cosine similarity between two vectors

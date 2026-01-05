@@ -18,7 +18,8 @@
     "workspaceContains:.cuedeck/config.toml",
     "onCommand:cuedeck.search",
     "onCommand:cuedeck.graphView",
-    "onView:cuedeckTasks"
+    "onView:cuedeckTasks",
+    "onLanguage:markdown"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -33,7 +34,49 @@
       },
       {
         "command": "cuedeck.refreshTasks",
-        "title": "CueDeck: Refresh Tasks"
+        "title": "CueDeck: Refresh Tasks",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "cuedeck.createTask",
+        "title": "CueDeck: Create Task",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cuedeck.searchTasks",
+        "title": "CueDeck: Search Tasks",
+        "icon": "$(search)"
+      },
+      {
+        "command": "cuedeck.openTask",
+        "title": "Open Task File"
+      },
+      {
+        "command": "cuedeck.changeTaskStatus",
+        "title": "Change Status"
+      },
+      {
+        "command": "cuedeck.changeTaskPriority",
+        "title": "Change Priority"
+      },
+      {
+        "command": "cuedeck.changeTaskAssignee",
+        "title": "Change Assignee"
+      },
+      {
+        "command": "cuedeck.createTaskFromTemplate",
+        "title": "CueDeck: Create Task from Template",
+        "icon": "$(file-add)"
+      },
+      {
+        "command": "cuedeck.filterTasks",
+        "title": "CueDeck: Filter Tasks",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "cuedeck.sortTasks",
+        "title": "CueDeck: Sort Tasks",
+        "icon": "$(arrow-both)"
       }
     ],
     "viewsContainers": {
@@ -50,6 +93,61 @@
         {
           "id": "cuedeckTasks",
           "name": "Tasks"
+        },
+        {
+          "id": "cuedeckStats",
+          "name": "Statistics"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "cuedeck.refreshTasks",
+          "when": "view == cuedeckTasks",
+          "group": "navigation"
+        },
+        {
+          "command": "cuedeck.createTask",
+          "when": "view == cuedeckTasks",
+          "group": "navigation"
+        },
+        {
+          "command": "cuedeck.searchTasks",
+          "when": "view == cuedeckTasks",
+          "group": "navigation"
+        },
+        {
+          "command": "cuedeck.filterTasks",
+          "when": "view == cuedeckTasks",
+          "group": "navigation"
+        },
+        {
+          "command": "cuedeck.sortTasks",
+          "when": "view == cuedeckTasks",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "cuedeck.openTask",
+          "when": "view == cuedeckTasks && viewItem == task",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "cuedeck.changeTaskStatus",
+          "when": "view == cuedeckTasks && viewItem == task",
+          "group": "2_metadata@1"
+        },
+        {
+          "command": "cuedeck.changeTaskPriority",
+          "when": "view == cuedeckTasks && viewItem == task",
+          "group": "2_metadata@2"
+        },
+        {
+          "command": "cuedeck.changeTaskAssignee",
+          "when": "view == cuedeckTasks && viewItem == task",
+          "group": "2_metadata@3"
         }
       ]
     },
@@ -67,7 +165,31 @@
           "description": "Enable real-time sync with team members"
         }
       }
-    }
+    },
+    "keybindings": [
+      {
+        "command": "cuedeck.createTask",
+        "key": "ctrl+shift+t",
+        "mac": "cmd+shift+t",
+        "when": "!terminalFocus"
+      },
+      {
+        "command": "cuedeck.search",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f"
+      },
+      {
+        "command": "cuedeck.graphView",
+        "key": "ctrl+shift+g",
+        "mac": "cmd+shift+g"
+      },
+      {
+        "command": "cuedeck.refreshTasks",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "view == cuedeckTasks"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -78,11 +200,15 @@
     "package": "vsce package"
   },
   "devDependencies": {
-    "@types/vscode": "^1.85.0",
     "@types/node": "^20.10.0",
-    "typescript": "^5.3.3",
+    "@types/vscode": "^1.85.0",
     "@vscode/test-electron": "^2.3.8",
+    "cytoscape": "^3.33.1",
+    "typescript": "^5.3.3",
     "vsce": "^2.15.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "js-yaml": "^4.1.1"
+  }
 }

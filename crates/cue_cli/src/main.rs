@@ -2,6 +2,10 @@
 //!
 //! Usage: cue <command> [options]
 
+mod tui;
+mod commands;
+
+use commands::cmd_query;
 use clap::{Parser, Subcommand};
 use cue_common::EXIT_ERROR;
 use std::path::Path;
@@ -79,6 +83,14 @@ enum Commands {
         /// Normalize tags to lowercase during repair
         #[arg(long)]
         normalize_tags: bool,
+
+        /// Strict mode: treat warnings as errors (for pre-commit hooks)
+        #[arg(long)]
+        strict: bool,
+
+        /// Fail on any warnings (alias for --strict, for CI/CD)
+        #[arg(long)]
+        fail_on_warnings: bool,
     },
 
     /// Manage implementation tasks
@@ -137,6 +149,9 @@ enum Commands {
     /// Start MCP server (JSON-RPC over stdio)
     Mcp,
 
+    /// Launch Terminal User Interface (interactive dashboard)
+    Tui,
+
     /// Search documents (non-interactive, for tool integration)
     Search {
         /// Search query
@@ -167,6 +182,20 @@ enum Commands {
         limit: usize,
     },
 
+    /// Execute query using unified query language  
+    Query {
+        /// Query string (e.g. 'status:active +backend')
+        query: Option<String>,
+
+        /// Batch queries from JSON file
+        #[arg(long)]
+        batch: Option<String>,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Visualize dependency graph
     Graph {
         /// Output format
@@ -184,6 +213,12 @@ enum Commands {
         /// Output as JSON (for tool integration)
         #[arg(long)]
         json: bool,
+    },
+
+    /// Manage task templates
+    Template {
+        #[command(subcommand)]
+        action: TemplateAction,
     },
 }
 
@@ -265,13 +300,42 @@ enum LogAction {
     Clear,
 }
 
+#[derive(Subcommand)]
+enum TemplateAction {
+    /// List available templates
+    List,
+
+    /// Create task from template
+    Create {
+        /// Template name (bug, feature, meeting, etc.)
+        template: String,
+
+        /// Task title
+        title: String,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
 
     // Initialize structured logging via centralized telemetry module
-    cue_common::telemetry::init_tracing(cli.verbose, false);
-    tracing::info!("CueDeck CLI started");
+    // For TUI, we disable standard logging to prevent UI corruption
+    if !matches!(cli.command, Commands::Tui) {
+        cue_common::telemetry::init_tracing(cli.verbose, false);
+        tracing::info!("CueDeck CLI started");
+    }
+
+    // Pre-warm embedding model for search commands to reduce first-search latency
+    if matches!(cli.command, Commands::Search { .. } | Commands::Open { .. }) {
+        if let Err(e) = cue_core::embeddings::EmbeddingModel::init() {
+            tracing::warn!("Failed to pre-warm embedding model: {}", e);
+        }
+    }
 
     let result = match cli.command {
         Commands::Init => cmd_init().await,
@@ -290,7 +354,7 @@ async fn main() {
 
         Commands::Watch => cmd_watch().await,
 
-        Commands::Doctor { repair, json, normalize_tags } => cmd_doctor(repair, json, normalize_tags).await,
+        Commands::Doctor { repair, json, normalize_tags, strict, fail_on_warnings } => cmd_doctor(repair, json, normalize_tags, strict || fail_on_warnings).await,
         Commands::Card { action } => cmd_card(action).await,
         Commands::List { status, tags, priority, assignee, created, updated, json } => 
             cmd_list(status, tags, priority, assignee, created, updated, json).await,
@@ -298,6 +362,7 @@ async fn main() {
         Commands::Logs { action } => cmd_logs(action).await,
         Commands::Upgrade => cmd_upgrade().await,
         Commands::Mcp => cmd_mcp().await,
+        Commands::Tui => cmd_tui().await,
         Commands::Search {
             query,
             mode,
@@ -307,12 +372,19 @@ async fn main() {
             json,
             limit,
         } => cmd_search(query, mode, tags, priority, assignee, json, limit).await,
+        Commands::Query { query, batch, json } => cmd_query(query, batch, json).await,
         Commands::Graph {
             format,
             output,
             stats,
             json,
         } => cmd_graph(format, output, stats, json).await,
+        Commands::Template { action } => match action {
+            TemplateAction::List => cmd_template_list().await,
+            TemplateAction::Create { template, title, json } => {
+                cmd_template_create(&template, &title, json).await
+            }
+        },
     };
 
     if let Err(e) = result {
@@ -642,13 +714,17 @@ async fn cmd_search(
     Ok(())
 }
 
-async fn cmd_doctor(repair: bool, json: bool, normalize_tags: bool) -> anyhow::Result<()> {
+async fn cmd_doctor(repair: bool, json: bool, normalize_tags: bool, strict: bool) -> anyhow::Result<()> {
     use cue_core::doctor::{run_diagnostics, run_repairs, CheckStatus};
 
     let cwd = std::env::current_dir()?;
 
     if !json {
-        eprintln!("🔍 Running workspace health checks...\n");
+        if strict {
+            eprintln!("🔍 Running workspace health checks (strict mode)...\n");
+        } else {
+            eprintln!("🔍 Running workspace health checks...\n");
+        }
     }
 
     let report = run_diagnostics(&cwd)?;
@@ -657,6 +733,14 @@ async fn cmd_doctor(repair: bool, json: bool, normalize_tags: bool) -> anyhow::R
         // JSON output without repair
         let json_str = serde_json::to_string_pretty(&report)?;
         println!("{}", json_str);
+        
+        // In strict mode, exit with error if warnings or failures exist
+        if strict {
+            let has_issues = report.checks.iter().any(|c| c.status != CheckStatus::Pass);
+            if has_issues {
+                std::process::exit(EXIT_ERROR);
+            }
+        }
         return Ok(());
     }
 
@@ -769,10 +853,26 @@ async fn cmd_doctor(repair: bool, json: bool, normalize_tags: bool) -> anyhow::R
                 }
             }
         }
+        
+        // In strict mode, fail if any issues remain (including warnings)
+        if strict {
+            let has_issues = final_report.checks.iter().any(|c| c.status != CheckStatus::Pass);
+            if has_issues {
+                std::process::exit(EXIT_ERROR);
+            }
+        }
     } else if !json {
         // No repair, just show summary
         eprintln!();
-        if report.healthy {
+        
+        // Determine if healthy (in strict mode, warnings also count as unhealthy)
+        let is_healthy = if strict {
+            report.checks.iter().all(|c| c.status == CheckStatus::Pass)
+        } else {
+            report.healthy
+        };
+        
+        if is_healthy {
             eprintln!("✅ All checks passed!");
         } else {
             let failed = report
@@ -791,12 +891,19 @@ async fn cmd_doctor(repair: bool, json: bool, normalize_tags: bool) -> anyhow::R
                 .filter(|c| c.fixable && c.status != CheckStatus::Pass)
                 .count();
 
-            eprintln!("❌ Health check failed:");
+            if strict && warned > 0 && failed == 0 {
+                eprintln!("❌ Health check failed (strict mode):");
+            } else {
+                eprintln!("❌ Health check failed:");
+            }
             if failed > 0 {
                 eprintln!("  {} issue(s) need attention", failed);
             }
             if warned > 0 {
                 eprintln!("  {} warning(s)", warned);
+                if strict {
+                    eprintln!("  ⚠️  Warnings treated as errors in strict mode");
+                }
             }
             if fixable > 0 {
                 eprintln!("\n💡 Tip: Run with --repair to automatically fix {} issue(s)", fixable);
@@ -1578,5 +1685,61 @@ async fn cmd_mcp() -> anyhow::Result<()> {
         }
     }
 
+    Ok(())
+}
+
+async fn cmd_tui() -> anyhow::Result<()> {
+    tui::run()?;
+    Ok(())
+}
+
+async fn cmd_template_list() -> anyhow::Result<()> {
+    let cwd = std::env::current_dir()?;
+    let templates = crate::commands::template::list_templates(&cwd)?;
+    
+    if templates.is_empty() {
+        eprintln!("No templates found in .cuedeck/templates/");
+        eprintln!("💡 Tip: See VSCode extension or create custom templates");
+        return Ok(());
+    }
+    
+    eprintln!("Available templates:");
+    for template in templates {
+        eprintln!("  • {}", template);
+    }
+    
+    Ok(())
+}
+
+async fn cmd_template_create(
+    template: &str,
+    title: &str,
+    json: bool,
+) -> anyhow::Result<()> {
+    let cwd = std::env::current_dir()?;
+    
+    let path = match crate::commands::template::create_from_template(&cwd, template, title) {
+        Ok(p) => p,
+        Err(e) if json => {
+            print_json_error(&e, "TEMPLATE_CREATE_FAILED");
+            return Ok(());
+        }
+        Err(e) => return Err(e),
+    };
+    
+    if json {
+        let output = serde_json::json!({
+            "success": true,
+            "template": template,
+            "title": title,
+            "path": path.display().to_string(),
+            "id": path.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown"),
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    } else {
+        eprintln!("✓ Created task from template '{}':", template);
+        eprintln!("  {}", path.display());
+    }
+    
     Ok(())
 }

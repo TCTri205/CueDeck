@@ -54,7 +54,7 @@ pub enum SyncError {
     CrdtError(String),
 
     #[error("WebSocket error: {0}")]
-    WebSocketError(#[from] tokio_tungstenite::tungstenite::Error),
+    WebSocketError(Box<tokio_tungstenite::tungstenite::Error>),
 
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
@@ -79,4 +79,10 @@ pub enum SyncError {
     
     #[error("Configuration error: {0}")]
     ConfigError(#[from] anyhow::Error),
+}
+
+impl From<tokio_tungstenite::tungstenite::Error> for SyncError {
+    fn from(e: tokio_tungstenite::tungstenite::Error) -> Self {
+        SyncError::WebSocketError(Box::new(e))
+    }
 }

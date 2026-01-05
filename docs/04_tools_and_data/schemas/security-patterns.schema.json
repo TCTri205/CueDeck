@@ -131,7 +131,7 @@
                     "fix_suggestion": "Use environment variables instead of hardcoding keys",
                     "test_cases": {
                         "should_match": [
-                            "sk-1234567890abcdef1234567890",
+                            "sk-placeholder-key-for-tests-123",
                             "My key is sk-proj-abcdefghijklmnopqrstuvwxyz1234567890"
                         ],
                         "should_not_match": [

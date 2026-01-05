@@ -32,6 +32,11 @@ regex.workspace = true
 serde_yaml.workspace = true
 self_update.workspace = true
 
+# TUI (Terminal User Interface)
+ratatui = "0.26"
+crossterm = "0.27"
+tui-textarea = "0.4"
+
 [dev-dependencies]
 cue_test_helpers = { path = "../cue_test_helpers" }
 assert_cmd.workspace = true

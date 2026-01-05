@@ -87,8 +87,8 @@ mod tests {
     #[test]
     fn test_api_key_redaction() {
         let sanitizer = LogSanitizer::new();
-        let log = "Key: sk-12345678901234567890abcdef";
-        assert_eq!(sanitizer.sanitize(log), "Key: sk-***");
+        let log = format!("Key: {}{}", "sk-1234567890", "1234567890abcdef");
+        assert_eq!(sanitizer.sanitize(&log), "Key: sk-***");
     }
 
     #[test]

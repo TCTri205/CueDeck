@@ -320,6 +320,8 @@ pub enum Commands {
     Upgrade,
     /// Start MCP Server (AI Integration)
     Mcp,
+    /// Launch Terminal User Interface (TUI Dashboard)
+    Tui,
 }
 
 #[derive(Subcommand)]

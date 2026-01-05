@@ -330,7 +330,7 @@ fn check_task_graph(workspace_root: &Path) -> Result<Vec<HealthCheck>> {
 }
 
 /// Gather workspace statistics
-fn gather_workspace_stats(workspace_root: &Path) -> Result<WorkspaceStats> {
+pub fn gather_workspace_stats(workspace_root: &Path) -> Result<WorkspaceStats> {
     let graph = TaskGraph::from_workspace(workspace_root)?;
     let stats = graph.get_graph_stats();
 

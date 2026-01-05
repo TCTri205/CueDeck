@@ -163,24 +163,7 @@ Diagnoses and automatically repairs workspace issues.
 
 ### `cue graph`
 
-Visualize and analyze dependency graph of markdown documents.
-
-- **Usage**:
-
-  ```bash
-  cue graph [OPTIONS]
-  ```
-
-- **Flags**:
-  - `--format <FORMAT>`: Output format (`ascii`, `mermaid`, `dot`, `json`). Default: `ascii`.
-  - `--output <FILE>`: Write output to file instead of stdout.
-  - `--stats`: Show graph statistics (nodes, edges, cycles, orphans).
-
-- **Output Formats**:
-  - **`ascii`**: Terminal-friendly text representation
-  - **`mermaid`**: Mermaid flowchart syntax (for GitHub/docs)
-  - **`dot`**: Graphviz DOT format
-  - **`json`**: Machine-readable JSON structure
+Visualize the dependency graph.
 
 - **Examples**:
 
@@ -188,14 +171,18 @@ Visualize and analyze dependency graph of markdown documents.
   # Show ASCII visualization
   cue graph
   
-  # Export Mermaid diagram
+# Export Mermaid diagram
+
   cue graph --format mermaid --output docs/graph.md
   
-  # Show statistics with visualization
+# Show statistics with visualization
+
   cue graph --format ascii --stats
   
-  # Export JSON for external tools
+# Export JSON for external tools
+
   cue graph --format json --output graph.json
+
   ```
 
 - **Graph Statistics** (with `--stats`):
@@ -312,6 +299,38 @@ Starts the MCP (Model Context Protocol) Server for AI integration (Module 3).
   - `read_doc(path, anchor)` — Read specific document or section
   - `list_tasks(status)` — List cards by status
   - `update_task(id, updates)` — Modify card frontmatter
+
+### `cue tui`
+
+Launches an interactive Terminal User Interface (TUI) dashboard for managing your CueDeck workspace.
+
+- **Behavior**:
+  - Opens in alternate screen mode (preserves terminal history)
+  - Provides 3 tabs: Dashboard, Tasks, Graph
+  - Keyboard-driven navigation (Vim-style)
+
+- **Tabs**:
+  1. **Dashboard**: Workspace stats and recent files
+  2. **Tasks**: Interactive task list with filtering
+  3. **Graph**: ASCII tree view of knowledge graph
+
+- **Navigation**:
+  - `Tab` / `Shift+Tab`: Switch between tabs
+  - `j` / `Down`: Move down (in lists)
+  - `k` / `Up`: Move up (in lists)
+  - `?`: Show help overlay with all keybindings
+  - `q` / `Ctrl+C`: Quit TUI
+
+- **Examples**:
+
+  ```bash
+  # Launch TUI dashboard
+  cue tui
+  ```
+
+- **Requirements**:
+  - Terminal with ANSI color support
+  - Minimum 80x24 terminal size recommended
 
 ---
 **Related Docs**: [MODULE_DESIGN.md](../02_architecture/MODULE_DESIGN.md), [USER_STORIES.md](../01_general/USER_STORIES.md), [TOOLS_SPEC.md](./TOOLS_SPEC.md)
@@ -433,3 +452,44 @@ Validate task dependency graph for circular dependencies.
   - `1`: Circular dependency detected
 
 ---
+
+### `cue template`
+
+Manage task templates for structured task creation.
+
+- **Subcommands**:
+  - `list`: List available templates in `.cuedeck/templates/`.
+  - `create <TEMPLATE> <TITLE>`: Create a new task from a template.
+
+- **Usage**:
+
+  ```bash
+  cue template list
+  cue template create <template_name> <task_title> [--json]
+  ```
+
+- **Arguments**:
+  - `<template_name>`: Name of the template (e.g., `bug`, `feature`).
+  - `<task_title>`: Title for the new task.
+
+- **Flags**:
+  - `--json`: Output result in JSON format (useful for MCP/scripts).
+
+- **Variable Substitution**:
+  - `{{title}}`: Replaced with task title.
+  - `{{date}}`: Replaced with current date (YYYY-MM-DD).
+  - `{{user}}`: Replaced with current username.
+  - `{{id}}`: Replaced with generated task ID.
+
+- **Examples**:
+
+  ```bash
+  # List templates
+  cue template list
+  
+  # Create a bug report
+  cue template create bug "Login crash on iOS"
+  
+  # Create a feature request (JSON output)
+  cue template create feature "Dark Mode" --json
+  ```

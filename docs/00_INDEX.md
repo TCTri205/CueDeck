@@ -2,13 +2,14 @@
 
 **Welcome to CueDeck.** This index maps the entire knowledge base.
 
->> **Last Updated**: 2026-01-02 | **Total Files**: 45
+>> **Last Updated**: 2026-01-04 | **Total Files**: 57
 
 ## 📚 1. Start Here (Orientation)
 
 | File | Purpose |
 | :--- | :--- |
 | [`01_general/PROJECT_OVERVIEW.md`](./01_general/PROJECT_OVERVIEW.md) | High-level Goal, Value Prop, Scope. |
+| [`01_general/PRODUCT.md`](./01_general/PRODUCT.md) | **New!** Product spec: Personas, user journeys, non-goals, success criteria. |
 | [`01_general/QUICK_START.md`](./01_general/QUICK_START.md) | **New Developer**: Build & Run in 10 min. |
 | [`01_general/FAQ.md`](./01_general/FAQ.md) | Common Questions & Answers. |
 | [`01_general/USER_STORIES.md`](./01_general/USER_STORIES.md) | "As a User" requirements. |
@@ -30,8 +31,11 @@
 | [`02_architecture/ALGORITHMS.md`](./02_architecture/ALGORITHMS.md) | Cycle Detection, Token Pruning, Token Optimization Strategies. |
 | [`02_architecture/ERROR_HANDLING_STRATEGY.md`](./02_architecture/ERROR_HANDLING_STRATEGY.md) | `CueError`, `miette`, mapping logic. |
 | [`02_architecture/SECURITY.md`](./02_architecture/SECURITY.md) | Secret Guard, Extended Patterns, Code Quality Rules. |
+| [`04_security/SECURITY_RULES.md`](./04_security/SECURITY_RULES.md) | **New!** Zero-tolerance security rules for agentic development. |
 | [`02_architecture/TECH_STACK.md`](./02_architecture/TECH_STACK.md) | Dependencies (`Cargo.toml`). |
 | [`02_architecture/ARCHITECTURE_RULES.md`](./02_architecture/ARCHITECTURE_RULES.md) | Layered Architecture, Import Rules, Constraints. |
+| [`02_architecture/CORE_DOMAIN.md`](./02_architecture/CORE_DOMAIN.md) | **New!** Module ownership, review flow, knowledge transfer for critical code. |
+| [`02_architecture/CIRCUIT_BREAKER.md`](./02_architecture/CIRCUIT_BREAKER.md) | **New!** Prevention of infinite retry loops. |
 | [`02_architecture/IMPLEMENTATION_PATTERNS.md`](./02_architecture/IMPLEMENTATION_PATTERNS.md) | Compression, Change Detection, Scoring Patterns. |
 | [`02_architecture/PERFORMANCE_OPTIMIZATION.md`](./02_architecture/PERFORMANCE_OPTIMIZATION.md) | **New!** Cache optimization, Profiling, Benchmarking. |
 
@@ -44,9 +48,13 @@
 | [`03_agent_design/EXAMPLES.md`](./03_agent_design/EXAMPLES.md) | Concrete Tool usage scenarios. |
 | [`03_agent_design/MEMORY_STRATEGY.md`](./03_agent_design/MEMORY_STRATEGY.md) | Filesystem-as-Memory, Session Persistence, Anti-Forgetting. |
 | [`03_agent_design/RUST_CODING_STANDARDS.md`](./03_agent_design/RUST_CODING_STANDARDS.md) | Async/State patterns, Naming Conventions. |
+| [`03_agent_design/ENGINEERING_STANDARDS.md`](./03_agent_design/ENGINEERING_STANDARDS.md) | **New!** Error handling, retry/timeout, logging, caching, async patterns. |
+| [`03_agent_design/DANGEROUS_COMMANDS.md`](./03_agent_design/DANGEROUS_COMMANDS.md) | **New!** Blocklist for destructive operations. |
+| [`03_agent_design/LSP_INTEGRATION.md`](./03_agent_design/LSP_INTEGRATION.md) | **New!** Guide for semantic code understanding via LSP. |
 | [`03_agent_design/PROJECT_STRUCTURE.md`](./03_agent_design/PROJECT_STRUCTURE.md) | Source Tree Preview. |
 | [`03_agent_design/IMPLEMENTATION_TEMPLATES.md`](./03_agent_design/IMPLEMENTATION_TEMPLATES.md) | Cargo.toml, .gitignore, CI Starter. |
 | [`03_agent_design/GOVERNANCE_TEMPLATES.md`](./03_agent_design/GOVERNANCE_TEMPLATES.md) | Security Rules, Roles, Workflows, Review Checklist. |
+| [`03_agent_design/SELF_REVIEW_WORKFLOW.md`](./03_agent_design/SELF_REVIEW_WORKFLOW.md) | **New!** Actionable pre-merge verification steps. |
 
 ## 🛠️ 4. Tools & Data (The "Specs")
 
@@ -63,6 +71,8 @@
 
 | File | Purpose |
 | :--- | :--- |
+| [`05_quality_and_ops/VERIFICATION_PLAN.md`](./05_quality_and_ops/VERIFICATION_PLAN.md) | **New!** Master strategy: Governance, L1-L4 layers. |
+| [`05_quality_and_ops/GOVERNANCE_AUDIT_REPORT.md`](./05_quality_and_ops/GOVERNANCE_AUDIT_REPORT.md) | **New!** Audit results confirming 100% compliance. |
 | [`05_quality_and_ops/TESTING_STRATEGY.md`](./05_quality_and_ops/TESTING_STRATEGY.md) | Unit, Integ, Watcher tests. |
 | [`05_quality_and_ops/BENCHMARKING.md`](./05_quality_and_ops/BENCHMARKING.md) | **New!** Performance benchmarks, baseline metrics, regression detection. |
 | [`05_quality_and_ops/LOGGING_AND_TELEMETRY.md`](./05_quality_and_ops/LOGGING_AND_TELEMETRY.md) | Tracing strategy & Log levels. |
@@ -70,6 +80,7 @@
 | [`05_quality_and_ops/TROUBLESHOOTING.md`](./05_quality_and_ops/TROUBLESHOOTING.md) | Fixes for common errors. |
 | [`05_quality_and_ops/RISK_MANAGEMENT.md`](./05_quality_and_ops/RISK_MANAGEMENT.md) | Risk Matrix & Mitigations. |
 | [`05_quality_and_ops/ERROR_CATALOG.md`](./05_quality_and_ops/ERROR_CATALOG.md) | **New!** Error codes & Recovery steps. |
+| [`05_quality_and_ops/COMPLEXITY_METRICS.md`](./05_quality_and_ops/COMPLEXITY_METRICS.md) | **New!** Cyclomatic, cognitive complexity limits & CI enforcement. |
 | [`05_quality_and_ops/DEPLOYMENT_GUIDE.md`](./05_quality_and_ops/DEPLOYMENT_GUIDE.md) | Installation & Distribution. |
 | [`05_quality_and_ops/MAINTENANCE_GUIDE.md`](./05_quality_and_ops/MAINTENANCE_GUIDE.md) | **New!** Daily/Weekly tasks, Backup, DR. |
 

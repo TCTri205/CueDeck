@@ -111,7 +111,7 @@ impl SyncEngine {
                 }
                 Some(Err(e)) => {
                     tracing::error!("WebSocket error: {}", e);
-                    return Err(crate::SyncError::WebSocketError(e));
+                    return Err(crate::SyncError::WebSocketError(Box::new(e)));
                 }
                 None => {
                     tracing::info!("WebSocket connection closed");
